@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, cell::Cell, convert::Infallible, pin::Pin};
 use tap::Pipe;
 
-pub trait RefPineMap<K: Ord, V> {
+pub trait UnpinnedPineMap<K: Ord, V> {
 	/// Returns a reference to the value corresponding to the key.
 	///
 	/// The key may be any borrowed form of the map's key type,
@@ -18,7 +18,7 @@ pub trait RefPineMap<K: Ord, V> {
 	/// Outer error: Iff `value_factory` fails.
 	///
 	/// Inner error: Iff an entry matching `key` already exists.
-	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+	fn try_insert_with<F: FnOnce(&K) -> Result<V, E>, E>(
 		&self,
 		key: K,
 		value_factory: F,
@@ -29,13 +29,13 @@ pub trait RefPineMap<K: Ord, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_with<F: FnOnce() -> V>(&self, key: K, value_factory: F) -> Result<&V, (K, F)> {
+	fn insert_with<F: FnOnce(&K) -> V>(&self, key: K, value_factory: F) -> Result<&V, (K, F)> {
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with::<_, Infallible>(key, || {
-			value_factory.take().expect("unreachable")().pipe(Ok)
+		self.try_insert_with::<_, Infallible>(key, |key| {
+			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
 		.expect("unreachable")
-		.map_err(|(k, _)| (k, value_factory.take().expect("unreachable")))
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 	}
 
 	/// Inserts a new value, but only if no such key exists yet.
@@ -45,12 +45,10 @@ pub trait RefPineMap<K: Ord, V> {
 	/// Iff an entry matching `key` already exists.
 	fn insert(&self, key: K, value: V) -> Result<&V, (K, V)> {
 		let value = Cell::new(Some(value));
-		self.insert_with(key, || value.take().expect("unreachable"))
-			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
+		self.insert_with(key, |_| value.take().expect("unreachable"))
+			.map_err(|(key, _)| (key, value.take().expect("unreachable")))
 	}
-}
 
-pub trait MutPineMap<K: Ord, V> {
 	/// Clears the map, removing all elements.
 	///
 	/// # Panics
@@ -62,7 +60,7 @@ pub trait MutPineMap<K: Ord, V> {
 	///
 	/// The key may be any borrowed form of the map's key type,
 	/// but the ordering on the borrowed form *must* match the ordering on the key type.
-	fn get<Q>(&mut self, key: &Q) -> Option<&mut V>
+	fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
 	where
 		K: Borrow<Q>,
 		Q: Ord + ?Sized;
@@ -74,7 +72,7 @@ pub trait MutPineMap<K: Ord, V> {
 	/// Outer error: Iff `value_factory` fails.
 	///
 	/// Inner error: Iff an entry matching `key` already exists.
-	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+	fn try_insert_with_mut<F: FnOnce(&K) -> Result<V, E>, E>(
 		&mut self,
 		key: K,
 		value_factory: F,
@@ -85,17 +83,17 @@ pub trait MutPineMap<K: Ord, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_with<F: FnOnce() -> V>(
+	fn insert_with_mut<F: FnOnce(&K) -> V>(
 		&mut self,
 		key: K,
 		value_factory: F,
 	) -> Result<&mut V, (K, F)> {
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with::<_, Infallible>(key, || {
-			value_factory.take().expect("unreachable")().pipe(Ok)
+		self.try_insert_with_mut::<_, Infallible>(key, |key| {
+			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
 		.expect("unreachable")
-		.map_err(|(k, _)| (k, value_factory.take().expect("unreachable")))
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 	}
 
 	/// Inserts a new value, but only if no such key exists yet.
@@ -103,10 +101,10 @@ pub trait MutPineMap<K: Ord, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert(&mut self, key: K, value: V) -> Result<&mut V, (K, V)> {
+	fn insert_mut(&mut self, key: K, value: V) -> Result<&mut V, (K, V)> {
 		let value = Cell::new(Some(value));
-		self.insert_with(key, || value.take().expect("unreachable"))
-			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
+		self.insert_with_mut(key, |_| value.take().expect("unreachable"))
+			.map_err(|(key, _)| (key, value.take().expect("unreachable")))
 	}
 
 	/// Removes and returns a key-value pair if a matching key exists.
@@ -116,7 +114,7 @@ pub trait MutPineMap<K: Ord, V> {
 		Q: Ord + ?Sized;
 
 	/// Removes and returns a key-value pair if a matching key exists.
-	fn remove<Q>(&mut self, key: &Q) -> Option<V>
+	fn remove_value<Q>(&mut self, key: &Q) -> Option<V>
 	where
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
@@ -139,7 +137,7 @@ pub trait MutPineMap<K: Ord, V> {
 	/// # Returns
 	///
 	/// Whether a matching entry was found.
-	fn drop<Q>(&mut self, key: &Q) -> bool
+	fn drop_entry<Q>(&mut self, key: &Q) -> bool
 	where
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
@@ -150,10 +148,10 @@ pub trait MutPineMap<K: Ord, V> {
 
 /// # Safety
 ///
-/// Any implementors must ensure their [`RefPineMap`] implementation would be valid if all `Value`s were pinned.
+/// Any implementors must ensure their [`UnpinnedPineMap`] implementation would be valid if all `Value`s were pinned.
 ///
 /// See: [`pin` -> `Drop` guarantee](https://doc.rust-lang.org/std/pin/index.html#drop-guarantee)
-pub unsafe trait PinRefPineMap<K: Ord, V>: RefPineMap<K, V> {
+pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
 	/// Returns a reference to the value corresponding to the key.
 	///
 	/// The key may be any borrowed form of the map's key type,
@@ -164,7 +162,7 @@ pub unsafe trait PinRefPineMap<K: Ord, V>: RefPineMap<K, V> {
 		Q: Ord + ?Sized,
 	{
 		unsafe {
-			<Self as RefPineMap<_, _>>::get(&*self, key)
+			<Self as UnpinnedPineMap<_, _>>::get(&*self, key)
 				.map(|value| Pin::new_unchecked(&*(value as *const _)))
 		}
 	}
@@ -176,13 +174,13 @@ pub unsafe trait PinRefPineMap<K: Ord, V>: RefPineMap<K, V> {
 	/// Outer error: Iff `value_factory` fails.
 	///
 	/// Inner error: Iff an entry matching `key` already exists.
-	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+	fn try_insert_with<F: FnOnce(&K) -> Result<V, E>, E>(
 		self: Pin<&Self>,
 		key: K,
 		value_factory: F,
 	) -> Result<Result<Pin<&V>, (K, F)>, E> {
 		unsafe {
-			<Self as RefPineMap<_, _>>::try_insert_with(&*self, key, value_factory)
+			<Self as UnpinnedPineMap<_, _>>::try_insert_with(&*self, key, value_factory)
 				.map(|inner| inner.map(|value| Pin::new_unchecked(&*(value as *const _))))
 		}
 	}
@@ -192,14 +190,14 @@ pub unsafe trait PinRefPineMap<K: Ord, V>: RefPineMap<K, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_with<F: FnOnce() -> V>(
+	fn insert_with<F: FnOnce(&K) -> V>(
 		self: Pin<&Self>,
 		key: K,
 		value_factory: F,
 	) -> Result<Pin<&V>, (K, F)> {
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with::<_, Infallible>(key, || {
-			value_factory.take().expect("unreachable")().pipe(Ok)
+		self.try_insert_with::<_, Infallible>(key, |key| {
+			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
 		.expect("unreachable")
 		.map_err(|(k, _)| (k, value_factory.take().expect("unreachable")))
@@ -212,37 +210,30 @@ pub unsafe trait PinRefPineMap<K: Ord, V>: RefPineMap<K, V> {
 	/// Iff an entry matching `key` already exists.
 	fn insert(self: Pin<&Self>, key: K, value: V) -> Result<Pin<&V>, (K, V)> {
 		let value = Cell::new(Some(value));
-		self.insert_with(key, || value.take().expect("unreachable"))
+		self.insert_with(key, |_| value.take().expect("unreachable"))
 			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
 	}
-}
 
-/// # Safety
-///
-/// Any implementors must ensure their [`MutPineMap`] implementation would be valid if all `Value`s were pinned.
-///
-/// See: [`pin` -> `Drop` guarantee](https://doc.rust-lang.org/std/pin/index.html#drop-guarantee)
-pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 	/// Clears the map, removing all elements.
 	///
 	/// # Panics
 	///
 	/// Iff the instance was poisoned.
 	fn clear(self: Pin<&mut Self>) {
-		unsafe { <Self as MutPineMap<_, _>>::clear(self.get_unchecked_mut()) }
+		unsafe { <Self as UnpinnedPineMap<_, _>>::clear(self.get_unchecked_mut()) }
 	}
 
 	/// Returns a reference to the value corresponding to the key.
 	///
 	/// The key may be any borrowed form of the map's key type,
 	/// but the ordering on the borrowed form *must* match the ordering on the key type.
-	fn get<Q>(self: Pin<&mut Self>, key: &Q) -> Option<Pin<&mut V>>
+	fn get_mut_pinned<Q>(self: Pin<&mut Self>, key: &Q) -> Option<Pin<&mut V>>
 	where
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
 	{
 		unsafe {
-			<Self as MutPineMap<_, _>>::get(self.get_unchecked_mut(), key)
+			<Self as UnpinnedPineMap<_, _>>::get_mut(self.get_unchecked_mut(), key)
 				.map(|value| Pin::new_unchecked(value))
 		}
 	}
@@ -254,13 +245,13 @@ pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 	/// Outer error: Iff `value_factory` fails.
 	///
 	/// Inner error: Iff an entry matching `key` already exists.
-	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+	fn try_insert_with_mut<F: FnOnce(&K) -> Result<V, E>, E>(
 		self: Pin<&mut Self>,
 		key: K,
 		value_factory: F,
 	) -> Result<Result<Pin<&mut V>, (K, F)>, E> {
 		unsafe {
-			<Self as MutPineMap<_, _>>::try_insert_with(
+			<Self as UnpinnedPineMap<_, _>>::try_insert_with_mut(
 				self.get_unchecked_mut(),
 				key,
 				value_factory,
@@ -274,14 +265,14 @@ pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_with<F: FnOnce() -> V>(
+	fn insert_with_mut<F: FnOnce(&K) -> V>(
 		self: Pin<&mut Self>,
 		key: K,
 		value_factory: F,
 	) -> Result<Pin<&mut V>, (K, F)> {
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with::<_, Infallible>(key, || {
-			value_factory.take().expect("unreachable")().pipe(Ok)
+		self.try_insert_with_mut::<_, Infallible>(key, |key| {
+			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
 		.expect("unreachable")
 		.map_err(|(k, _)| (k, value_factory.take().expect("unreachable")))
@@ -292,9 +283,9 @@ pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert(self: Pin<&mut Self>, key: K, value: V) -> Result<Pin<&mut V>, (K, V)> {
+	fn insert_mut(self: Pin<&mut Self>, key: K, value: V) -> Result<Pin<&mut V>, (K, V)> {
 		let value = Cell::new(Some(value));
-		self.insert_with(key, || value.take().expect("unreachable"))
+		self.insert_with_mut(key, |_| value.take().expect("unreachable"))
 			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
 	}
 
@@ -306,7 +297,7 @@ pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
 	{
-		unsafe { <Self as MutPineMap<_, _>>::remove_key(self.get_unchecked_mut(), key) }
+		unsafe { <Self as UnpinnedPineMap<_, _>>::remove_key(self.get_unchecked_mut(), key) }
 	}
 
 	/// If a matching key exists, drops the associated key and value. (In unspecified order!)
@@ -318,7 +309,7 @@ pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 	/// # Returns
 	///
 	/// Whether a matching entry was found.
-	fn drop<Q>(self: Pin<&mut Self>, key: &Q) -> bool
+	fn drop_entry<Q>(self: Pin<&mut Self>, key: &Q) -> bool
 	where
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,

@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use pinus::{prelude::RefPineMap, sync::PineMap};
+use pinus::{prelude::*, sync::PineMap};
 
 #[test]
 fn new() {
@@ -11,7 +11,7 @@ fn new() {
 fn insert() {
 	let map = PineMap::<usize, usize>::new();
 	assert_eq!(
-		map.try_insert_with::<_, ()>(1, || Ok(2))
+		map.try_insert_with::<_, ()>(1, |_| Ok(2))
 			.unwrap()
 			.ok()
 			.unwrap(),
@@ -23,7 +23,7 @@ fn insert() {
 fn complicated() {
 	let map = PineMap::<usize, usize>::new();
 	assert_eq!(
-		map.try_insert_with::<_, ()>(1, || Ok(2))
+		map.try_insert_with::<_, ()>(1, |_| Ok(2))
 			.unwrap()
 			.ok()
 			.unwrap(),
@@ -31,7 +31,7 @@ fn complicated() {
 	);
 
 	assert_eq!(
-		map.try_insert_with::<_, ()>(2, || Ok(3))
+		map.try_insert_with::<_, ()>(2, |_| Ok(3))
 			.unwrap()
 			.ok()
 			.unwrap(),
@@ -39,7 +39,7 @@ fn complicated() {
 	);
 
 	assert_eq!(
-		map.try_insert_with::<_, ()>(3, || Ok(4))
+		map.try_insert_with::<_, ()>(3, |_| Ok(4))
 			.unwrap()
 			.ok()
 			.unwrap(),
@@ -47,7 +47,7 @@ fn complicated() {
 	);
 
 	assert_eq!(
-		map.try_insert_with::<_, ()>(3, || Ok(4))
+		map.try_insert_with::<_, ()>(3, |_| Ok(4))
 			.unwrap()
 			.unwrap_err()
 			.0,
@@ -58,7 +58,7 @@ fn complicated() {
 	let b = map.get(&2);
 	let c = map.get(&3);
 
-	let result = map.try_insert_with::<_, Box<dyn Error>>(5, || Ok(7));
+	let result = map.try_insert_with::<_, Box<dyn Error>>(5, |_| Ok(7));
 
 	println!("{:?}", a);
 	println!("{:?}", b);

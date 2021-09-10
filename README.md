@@ -15,7 +15,22 @@
 
 [![crev reviews](https://web.crev.dev/rust-reviews/badge/crev_count/pinus.svg)](https://web.crev.dev/rust-reviews/crate/pinus/)
 
-TODO_README_DESCRIPTION
+A prickly BTreeMap.
+
+You can insert through shared references and values are pin-projected.
+
+You can remove keys and drop entries through exclusive references.
+
+You can remove values through exclusive references until the `PineMap` is pinned.
+
+### Help wanted!
+
+I need only a fairly barebones implementation and not necessarily optimized version of this data structure for my own project(s),
+but am committed to maintaining it into shape if there's interest.
+
+Follow the "good first issues" badge above for starting points!
+
+Note that the crate uses unsafe code very frequently, so you should be at least somewhat comfortable with ensuring soundness manually. Code reviews are also highly appreciated, both within and outside of this regard.
 
 ## Installation
 
@@ -28,7 +43,87 @@ cargo add pinus
 ## Example
 
 ```rust
-// TODO_EXAMPLE
+use ergo_pin::ergo_pin;
+use pinus::{prelude::*, sync::PineMap};
+use std::{convert::Infallible, pin::Pin};
+
+#[ergo_pin]
+fn main() {
+
+  // `PineMap` is interior-mutable, so either is useful:
+  let map = PineMap::new();
+  let mut mut_map = PineMap::new();
+
+
+  // Get parallel shared references by inserting like this:
+  let a: &String = map.insert("Hello!", "Hello!".to_string())
+    .unwrap(/* Your data back if the entry already existed. */);
+  let b: &String = map.insert_with("Hello again!", |k| k.to_string())
+    .map_err(|(key, _factory)| key).unwrap();
+  let c: &String = map.try_insert_with::<_, Infallible>("Hello once again!", |k| Ok(k.to_string()))
+    .unwrap(/* Error from factory. */)
+    .map_err(|(key, _factory)| key).unwrap();
+
+  let a2: &String = map.get("Hello!").unwrap();
+
+  let _ = (a, a2, b, c);
+
+
+  // Get exclusive references like this (also with or without factory):
+  let mut_a: &mut String = mut_map.insert_with_mut("Hi!", |k| k.to_string())
+    .map_err(|(key, _factory)| key).unwrap();
+
+  let mut_a2: &mut String = mut_map.get_mut("Hi!").unwrap();
+
+  // The `…_mut` methods are actually faster, but their results can't be held onto at once:
+  // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
+
+
+  // Remove entries like this:
+  mut_map.clear();
+  let _: Option<(&str, String)> = mut_map.remove_pair("A");
+  let _: Option<String> = mut_map.remove_value("B");
+  let _: Option<&str> = mut_map.remove_key("C");
+  let _: bool = mut_map.drop_entry("D");
+
+
+  /////
+
+
+  // Now on to part 2, pin projection:
+  let mut map: Pin<&_> = pin!(map).as_ref();
+  let mut mut_map: Pin<&mut _> = pin!(mut_map);
+
+
+  // Shared references are now pinned:
+  let a: Pin<&String> = map.insert("Hello!!", "Hello!!".to_string())
+    .unwrap();
+  let b: Pin<&String> = map.insert_with("Hello again!!", |k| k.to_string())
+    .ok().unwrap();
+  let c: Pin<&String> = map.try_insert_with::<_, Infallible>("Hello once again!!", |k| Ok(k.to_string()))
+    .unwrap().ok().unwrap();
+
+  let a2: Pin<&String> = map.get("Hello!").unwrap();
+
+  let _ = (a, a2, b, c);
+
+
+  // Exclusive references are also pinned:
+  let mut mut_a: Pin<&mut String> = mut_map.as_mut().insert_with_mut("Hi!", |k| k.to_string())
+    .map_err(|(key, _factory)| key).unwrap();
+
+  let mut mut_a2: Pin<&mut String> = mut_map.as_mut().get_mut_pinned("Hi!").unwrap();
+
+  // The `…_mut` methods are actually faster, but their results can't be held onto at once:
+  // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
+
+  // Remove entries like this:
+  mut_map.as_mut().clear();
+  let _: Option<(&str, String)> = mut_map.remove_pair("A");
+  let _: Option<String> = mut_map.remove_value("B"); /// ???
+  let _: Option<&str> = mut_map.as_mut().remove_key("C");
+  let _: bool = mut_map.as_mut().drop_entry("D");
+}
 ```
 
 ## License

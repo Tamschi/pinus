@@ -1,4 +1,4 @@
-use crate::prelude::{MutPineMap, PinMutPineMap, PinRefPineMap, RefPineMap};
+use crate::prelude::{PinnedPineMap, UnpinnedPineMap};
 use parking_lot::RwLock;
 use std::{
 	cell::UnsafeCell,
@@ -41,8 +41,7 @@ impl<K: Ord, V> Default for PineMap<K, V> {
 	}
 }
 
-impl<K: Ord, V> RefPineMap<K, V> for PineMap<K, V> {
-	#[track_caller]
+impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 	fn get<Q>(&self, key: &Q) -> Option<&V>
 	where
 		K: std::borrow::Borrow<Q>,
@@ -62,8 +61,7 @@ impl<K: Ord, V> RefPineMap<K, V> for PineMap<K, V> {
 		.pipe(Some)
 	}
 
-	#[track_caller]
-	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+	fn try_insert_with<F: FnOnce(&K) -> Result<V, E>, E>(
 		&self,
 		key: K,
 		value_factory: F,
@@ -78,7 +76,7 @@ impl<K: Ord, V> RefPineMap<K, V> for PineMap<K, V> {
 		if slot_map.contains_key(&key) {
 			Err((key, value_factory))
 		} else if let Some(hole) = holes.pop() {
-			let value = value_factory()?;
+			let value = value_factory(&key)?;
 			slot_map.insert(key, hole);
 			let slot =
 				unsafe { values.get_unchecked_mut(hole.0).get_unchecked_mut(hole.1) }.get_mut();
@@ -98,7 +96,7 @@ impl<K: Ord, V> RefPineMap<K, V> for PineMap<K, V> {
 				values.last_mut()
 			};
 			slab.push(
-				value_factory()?
+				value_factory(&key)?
 					.pipe(ManuallyDrop::new)
 					.pipe(UnsafeCell::new),
 			);
@@ -110,10 +108,7 @@ impl<K: Ord, V> RefPineMap<K, V> for PineMap<K, V> {
 		}
 		.pipe(Ok)
 	}
-}
 
-impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
-	#[track_caller]
 	fn clear(&mut self) {
 		let contents = self.contents.get_mut(/* poisoned */);
 		contents.holes.clear();
@@ -136,8 +131,7 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 		}
 	}
 
-	#[track_caller]
-	fn get<Q>(&mut self, key: &Q) -> Option<&mut V>
+	fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
 	where
 		K: std::borrow::Borrow<Q>,
 		Q: Ord + ?Sized,
@@ -156,7 +150,7 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 		.pipe(Some)
 	}
 
-	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+	fn try_insert_with_mut<F: FnOnce(&K) -> Result<V, E>, E>(
 		&mut self,
 		key: K,
 		value_factory: F,
@@ -171,7 +165,7 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 		if slot_map.contains_key(&key) {
 			Err((key, value_factory))
 		} else if let Some(hole) = holes.pop() {
-			let value = value_factory()?;
+			let value = value_factory(&key)?;
 			slot_map.insert(key, hole);
 			let slot =
 				unsafe { values.get_unchecked_mut(hole.0).get_unchecked_mut(hole.1) }.get_mut();
@@ -190,7 +184,7 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 			};
 			let slab = values.last_mut();
 			slab.push(
-				value_factory()?
+				value_factory(&key)?
 					.pipe(ManuallyDrop::new)
 					.pipe(UnsafeCell::new),
 			);
@@ -242,8 +236,21 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 	}
 }
 
-unsafe impl<K: Ord, V> PinRefPineMap<K, V> for PineMap<K, V> {}
-unsafe impl<K: Ord, V> PinMutPineMap<K, V> for PineMap<K, V> {}
+unsafe impl<K: Ord, V> PinnedPineMap<K, V> for PineMap<K, V> {}
+
+unsafe impl<K: Ord, V> Sync for PineMap<K, V>
+where
+	K: Sync + Send,
+	V: Sync + Send,
+{
+}
+
+unsafe impl<K: Ord, V> Send for PineMap<K, V>
+where
+	K: Send,
+	V: Send,
+{
+}
 
 impl<K: Ord, V> Drop for PineMap<K, V> {
 	fn drop(&mut self) {
