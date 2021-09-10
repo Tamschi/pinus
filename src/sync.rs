@@ -8,7 +8,7 @@ use std::{
 use tap::Pipe;
 use vec1::Vec1;
 
-pub struct PineMap<K, V> {
+pub struct PineMap<K: Ord, V> {
 	contents: RwLock<Cambium<K, V>>,
 }
 
@@ -244,3 +244,22 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 
 unsafe impl<K: Ord, V> PinRefPineMap<K, V> for PineMap<K, V> {}
 unsafe impl<K: Ord, V> PinMutPineMap<K, V> for PineMap<K, V> {}
+
+impl<K: Ord, V> Drop for PineMap<K, V> {
+	fn drop(&mut self) {
+		// None of the data will be used in the future,
+		// so explicit cleanup can be a bit more concise (and hopefully a little faster) than calling `.clean()`.
+
+		let contents = self.contents.get_mut(/* poisoned */);
+		for (_, (slab, i)) in mem::take(&mut contents.slot_map) {
+			unsafe {
+				contents
+					.values
+					.get_unchecked_mut(slab)
+					.get_unchecked(i)
+					.get()
+					.pipe(|value| ManuallyDrop::drop(&mut *value))
+			}
+		}
+	}
+}
