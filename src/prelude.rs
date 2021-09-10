@@ -40,6 +40,19 @@ pub trait MutPineMap<K: Ord, V> {
 	where
 		K: Borrow<Q>,
 		Q: Ord + ?Sized;
+
+	/// Tries to insert a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+		&mut self,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<&mut V, (K, F)>, E>;
 }
 
 /// # Safety
@@ -109,6 +122,28 @@ pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 		unsafe {
 			<Self as MutPineMap<_, _>>::get(self.get_unchecked_mut(), key)
 				.map(|value| Pin::new_unchecked(value))
+		}
+	}
+
+	/// Tries to insert a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+		self: Pin<&mut Self>,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<Pin<&mut V>, (K, F)>, E> {
+		unsafe {
+			<Self as MutPineMap<_, _>>::try_insert_with(
+				self.get_unchecked_mut(),
+				key,
+				value_factory,
+			)
+			.map(|inner| inner.map(|value| Pin::new_unchecked(&mut *(value as *mut _))))
 		}
 	}
 }

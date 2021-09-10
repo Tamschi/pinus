@@ -155,6 +155,53 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 		}
 		.pipe(Some)
 	}
+
+	fn try_insert_with<F: FnOnce() -> Result<V, E>, E>(
+		&mut self,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<&mut V, (K, F)>, E> {
+		let mut contents = self.contents.get_mut(/* poisoned */);
+		let Cambium {
+			slot_map,
+			values,
+			holes,
+		} = &mut *contents;
+		#[allow(clippy::map_entry)]
+		if slot_map.contains_key(&key) {
+			Err((key, value_factory))
+		} else if let Some(hole) = holes.pop() {
+			let value = value_factory()?;
+			slot_map.insert(key, hole);
+			let slot =
+				unsafe { values.get_unchecked_mut(hole.0).get_unchecked_mut(hole.1) }.get_mut();
+			*slot = ManuallyDrop::new(value);
+			Ok(unsafe { &mut **(slot as *mut ManuallyDrop<V>) })
+		} else {
+			let mut slab_i = values.len() - 1;
+			let slab = values.last_mut();
+			if slab.len() >= Vec::capacity(slab) {
+			} else {
+				slab_i += 1;
+				let target_capacity = slab.len() * 2;
+				let mut slab = Vec::new();
+				slab.reserve(target_capacity);
+				values.push(slab);
+			};
+			let slab = values.last_mut();
+			slab.push(
+				value_factory()?
+					.pipe(ManuallyDrop::new)
+					.pipe(UnsafeCell::new),
+			);
+			let i = slab.len() - 1;
+			slot_map.insert(key, (slab_i, i));
+			slab.last_mut()
+				.map(|value| &mut **value.get_mut())
+				.ok_or_else(|| unreachable!())
+		}
+		.pipe(Ok)
+	}
 }
 
 unsafe impl<K: Ord, V> PinRefPineMap<K, V> for PineMap<K, V> {}
