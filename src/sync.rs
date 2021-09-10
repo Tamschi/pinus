@@ -3,6 +3,7 @@ use parking_lot::RwLock;
 use std::{
 	cell::UnsafeCell,
 	collections::BTreeMap,
+	marker::PhantomPinned,
 	mem::{self, ManuallyDrop},
 };
 use tap::Pipe;
@@ -10,6 +11,7 @@ use vec1::Vec1;
 
 pub struct PineMap<K: Ord, V> {
 	contents: RwLock<Cambium<K, V>>,
+	_pin: PhantomPinned,
 }
 
 struct Cambium<K, V> {
@@ -31,6 +33,7 @@ impl<K: Ord, V> PineMap<K, V> {
 				}),
 				holes: Vec::new(),
 			}),
+			_pin: PhantomPinned,
 		}
 	}
 }

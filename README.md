@@ -117,10 +117,8 @@ fn main() {
   // The `…_mut` methods are actually faster, but their results can't be held onto at once:
   // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
 
-  // Remove entries like this:
+  // Only keys can be removed now, but values must be dropped in place:
   mut_map.as_mut().clear();
-  let _: Option<(&str, String)> = mut_map.remove_pair("A");
-  let _: Option<String> = mut_map.remove_value("B"); /// ???
   let _: Option<&str> = mut_map.as_mut().remove_key("C");
   let _: bool = mut_map.as_mut().drop_entry("D");
 }
