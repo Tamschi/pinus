@@ -7,5 +7,5 @@ pub mod readme {
 	doc_comment::doctest!("../README.md");
 }
 
-pub mod sync;
 pub mod prelude;
+pub mod sync;
