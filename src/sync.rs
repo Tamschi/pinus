@@ -202,6 +202,44 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 		}
 		.pipe(Ok)
 	}
+
+	fn remove_pair<Q>(&mut self, key: &Q) -> Option<(K, V)>
+	where
+		K: std::borrow::Borrow<Q>,
+		Q: Ord + ?Sized,
+	{
+		let contents = self.contents.get_mut(/* poisoned */);
+		let (key, (slab, i)) = contents.slot_map.remove_entry(key)?;
+		contents.holes.push((slab, i));
+		let value = unsafe {
+			contents
+				.values
+				.get_unchecked(slab)
+				.get_unchecked(i)
+				.get()
+				.pipe(|value| ManuallyDrop::take(&mut *value))
+		};
+		Some((key, value))
+	}
+
+	fn remove_key<Q>(&mut self, key: &Q) -> Option<K>
+	where
+		K: std::borrow::Borrow<Q>,
+		Q: Ord + ?Sized,
+	{
+		let contents = self.contents.get_mut(/* poisoned */);
+		let (key, (slab, i)) = contents.slot_map.remove_entry(key)?;
+		contents.holes.push((slab, i));
+		unsafe {
+			contents
+				.values
+				.get_unchecked(slab)
+				.get_unchecked(i)
+				.get()
+				.pipe(|value| ManuallyDrop::drop(&mut *value))
+		};
+		Some(key)
+	}
 }
 
 unsafe impl<K: Ord, V> PinRefPineMap<K, V> for PineMap<K, V> {}

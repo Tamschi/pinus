@@ -108,6 +108,44 @@ pub trait MutPineMap<K: Ord, V> {
 		self.insert_with(key, || value.take().expect("unreachable"))
 			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
 	}
+
+	/// Removes and returns a key-value pair if a matching key exists.
+	fn remove_pair<Q>(&mut self, key: &Q) -> Option<(K, V)>
+	where
+		K: Borrow<Q>,
+		Q: Ord + ?Sized;
+
+	/// Removes and returns a key-value pair if a matching key exists.
+	fn remove<Q>(&mut self, key: &Q) -> Option<V>
+	where
+		K: Borrow<Q>,
+		Q: Ord + ?Sized,
+	{
+		self.remove_pair(key).map(|(_, v)| v)
+	}
+
+	/// Removes and returns a key if a matching key exists.
+	///
+	/// The value is dropped, and the collection isn't poisoned if this causes a panic.
+	fn remove_key<Q>(&mut self, key: &Q) -> Option<K>
+	where
+		K: Borrow<Q>,
+		Q: Ord + ?Sized;
+
+	/// If a matching key exists, drops the associated key and value. (In unspecified order!)
+	///
+	/// The collection isn't poisoned if a panic occurs while dropping either key or value.
+	///
+	/// # Returns
+	///
+	/// Whether a matching entry was found.
+	fn drop<Q>(&mut self, key: &Q) -> bool
+	where
+		K: Borrow<Q>,
+		Q: Ord + ?Sized,
+	{
+		self.remove_key(key).is_some()
+	}
 }
 
 /// # Safety
@@ -258,5 +296,33 @@ pub unsafe trait PinMutPineMap<K: Ord, V>: MutPineMap<K, V> {
 		let value = Cell::new(Some(value));
 		self.insert_with(key, || value.take().expect("unreachable"))
 			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
+	}
+
+	/// Removes and returns a key if a matching key exists.
+	///
+	/// The collection isn't poisoned if this causes a panic.
+	fn remove_key<Q>(self: Pin<&mut Self>, key: &Q) -> Option<K>
+	where
+		K: Borrow<Q>,
+		Q: Ord + ?Sized,
+	{
+		unsafe { <Self as MutPineMap<_, _>>::remove_key(self.get_unchecked_mut(), key) }
+	}
+
+	/// If a matching key exists, drops the associated key and value. (In unspecified order!)
+	///
+	/// The collection isn't poisoned if a panic occurs while dropping either key or value.
+	///
+	/// **Note that only the value is pinned!** The key is not necessarily dropped in place.
+	///
+	/// # Returns
+	///
+	/// Whether a matching entry was found.
+	fn drop<Q>(self: Pin<&mut Self>, key: &Q) -> bool
+	where
+		K: Borrow<Q>,
+		Q: Ord + ?Sized,
+	{
+		self.remove_key(key).is_some()
 	}
 }
