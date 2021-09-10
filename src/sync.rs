@@ -161,7 +161,7 @@ impl<K: Ord, V> MutPineMap<K, V> for PineMap<K, V> {
 		key: K,
 		value_factory: F,
 	) -> Result<Result<&mut V, (K, F)>, E> {
-		let mut contents = self.contents.get_mut(/* poisoned */);
+		let contents = self.contents.get_mut(/* poisoned */);
 		let Cambium {
 			slot_map,
 			values,
