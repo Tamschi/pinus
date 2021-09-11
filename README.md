@@ -17,11 +17,9 @@
 
 A prickly BTreeMap.
 
-You can insert through shared references and values are pin-projected.
-
-You can remove keys and drop entries through exclusive references.
-
-You can remove values through exclusive references until the `PineMap` is pinned.
+- You can insert through shared references and values are pin-projected.
+- You can remove keys and drop entries through exclusive references.
+- You can remove values through exclusive references until the `PineMap` is pinned.
 
 <!-- markdownlint-disable heading-increment no-trailing-punctuation -->
 
@@ -132,9 +130,9 @@ fn main() {
 
 Licensed under either of
 
-* Apache License, Version 2.0
+- Apache License, Version 2.0
    ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-* MIT license
+- MIT license
    ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
@@ -153,9 +151,9 @@ dual licensed as above, without any additional terms or conditions.
 
 `pinus` strictly follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) with the following exceptions:
 
-* The minor version will not reset to 0 on major version changes (except for v1).  
+- The minor version will not reset to 0 on major version changes (except for v1).  
 Consider it the global feature level.
-* The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  
+- The patch version will not reset to 0 on major or minor version changes (except for v0.1 and v1).  
 Consider it the global patch level.
 
 This includes the Rust version requirement specified above.  
