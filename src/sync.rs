@@ -460,13 +460,25 @@ unsafe impl<K: Ord, V: ?Sized> PinnedPineMap<K, V> for PressedPineMap<K, V> {}
 unsafe impl<K: Ord, V> PinnedPineMapEmplace<K, V, V> for PineMap<K, V> {}
 unsafe impl<K: Ord, V: ?Sized, W> PinnedPineMapEmplace<K, V, W> for PressedPineMap<K, V> {}
 
+unsafe impl<K: Ord, V> Send for PineMap<K, V>
+where
+	K: Send,
+	V: Send,
+{
+}
+unsafe impl<K: Ord, V: ?Sized> Send for PressedPineMap<K, V>
+where
+	K: Send,
+	V: Send,
+{
+}
+
 unsafe impl<K: Ord, V> Sync for PineMap<K, V>
 where
 	K: Sync + Send,
 	V: Sync + Send,
 {
 }
-
 unsafe impl<K: Ord, V: ?Sized> Sync for PressedPineMap<K, V>
 where
 	K: Sync + Send,
@@ -474,19 +486,8 @@ where
 {
 }
 
-unsafe impl<K: Ord, V> Send for PineMap<K, V>
-where
-	K: Send,
-	V: Send,
-{
-}
-
-unsafe impl<K: Ord, V: ?Sized> Send for PressedPineMap<K, V>
-where
-	K: Send,
-	V: Send,
-{
-}
+impl<K: Ord, V> Unpin for PineMap<K, V> where V: Unpin {}
+impl<K: Ord, V: ?Sized> Unpin for PressedPineMap<K, V> where V: Unpin {}
 
 impl<K: Ord, V> Drop for PineMap<K, V> {
 	fn drop(&mut self) {
