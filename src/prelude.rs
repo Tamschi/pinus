@@ -10,6 +10,7 @@ use std::{
 };
 use tap::Pipe;
 
+/// Defines the API for trees that haven't been pinned (yet).
 pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	/// Returns a reference to the value corresponding to the key.
 	///
@@ -173,6 +174,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	}
 }
 
+/// Defines the emplacement API for trees that haven't been pinned (yet).
 pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W> {
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
 	///
@@ -272,9 +274,14 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W> {
 	}
 }
 
+/// Defines the pin-projecting API.
+///
 /// # Safety
 ///
 /// Any implementors must ensure their [`UnpinnedPineMap`] implementation would be valid if all `V`alues were pinned.
+///
+/// > If you MUST implement this yourself, pin this package to a specific minor version!
+/// > New methods with default implementations may be added in any feature update.
 ///
 /// See: [`pin` -> `Drop` guarantee](https://doc.rust-lang.org/std/pin/index.html#drop-guarantee)
 pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized>: UnpinnedPineMap<K, V> {
@@ -462,9 +469,14 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized>: UnpinnedPineMap<K, V> {
 	}
 }
 
+/// Defines the pin-projecting emplacement API.
+///
 /// # Safety
 ///
 /// Any implementors must ensure their [`UnpinnedPineMapEmplace`] implementation would be valid if all `V`alues were pinned.
+///
+/// > If you MUST implement this yourself, pin this package to a specific minor version!
+/// > New methods with default implementations may be added in any feature update.
 ///
 /// See: [`pin` -> `Drop` guarantee](https://doc.rust-lang.org/std/pin/index.html#drop-guarantee)
 pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:

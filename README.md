@@ -23,7 +23,11 @@ You can remove keys and drop entries through exclusive references.
 
 You can remove values through exclusive references until the `PineMap` is pinned.
 
+<!-- markdownlint-disable heading-increment no-trailing-punctuation -->
+
 ### Help wanted!
+
+<!-- markdownlint-enable heading-increment no-trailing-punctuation -->
 
 I need only a fairly barebones implementation and not necessarily optimized version of this data structure for my own project(s),
 but am committed to maintaining it into shape if there's interest.

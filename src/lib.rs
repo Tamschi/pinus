@@ -7,7 +7,7 @@
 //! it is exposed through the traits in the [`prelude`] rather than through associated methods.
 
 #![doc(html_root_url = "https://docs.rs/pinus/0.0.1")]
-#![warn(clippy::pedantic)]
+#![warn(clippy::pedantic, missing_docs)]
 #![allow(clippy::semicolon_if_nothing_returned)]
 
 use std::convert::Infallible;

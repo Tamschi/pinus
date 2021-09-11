@@ -55,6 +55,7 @@ struct PressedCambium<K, V: ?Sized> {
 }
 
 impl<K: Ord, V> PineMap<K, V> {
+	/// Creates a new empty [`PineMap`].
 	#[must_use]
 	pub fn new() -> Self {
 		Self {
@@ -73,6 +74,7 @@ impl<K: Ord, V> PineMap<K, V> {
 }
 
 impl<K: Ord, V: ?Sized> PressedPineMap<K, V> {
+	/// Creates a new empty [`PressedPineMap`].
 	#[must_use]
 	pub fn new() -> Self {
 		Self {
