@@ -1,7 +1,13 @@
-use std::{borrow::Borrow, cell::Cell, convert::Infallible, pin::Pin};
+use crate::UnwrapInfallible;
+use std::{
+	borrow::{Borrow, BorrowMut},
+	cell::Cell,
+	mem::MaybeUninit,
+	pin::Pin,
+};
 use tap::Pipe;
 
-pub trait UnpinnedPineMap<K: Ord, V> {
+pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	/// Returns a reference to the value corresponding to the key.
 	///
 	/// The key may be any borrowed form of the map's key type,
@@ -22,19 +28,24 @@ pub trait UnpinnedPineMap<K: Ord, V> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&V, (K, F)>, E>;
+	) -> Result<Result<&V, (K, F)>, E>
+	where
+		V: Sized;
 
 	/// Inserts a new value produced by the given factory, but only if no such key exists yet.
 	///
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_with<F: FnOnce(&K) -> V>(&self, key: K, value_factory: F) -> Result<&V, (K, F)> {
+	fn insert_with<F: FnOnce(&K) -> V>(&self, key: K, value_factory: F) -> Result<&V, (K, F)>
+	where
+		V: Sized, // Just for clarity.
+	{
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with::<_, Infallible>(key, |key| {
+		self.try_insert_with(key, |key| {
 			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
-		.expect("unreachable")
+		.unwrap_infallible()
 		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 	}
 
@@ -43,7 +54,10 @@ pub trait UnpinnedPineMap<K: Ord, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert(&self, key: K, value: V) -> Result<&V, (K, V)> {
+	fn insert(&self, key: K, value: V) -> Result<&V, (K, V)>
+	where
+		V: Sized,
+	{
 		let value = Cell::new(Some(value));
 		self.insert_with(key, |_| value.take().expect("unreachable"))
 			.map_err(|(key, _)| (key, value.take().expect("unreachable")))
@@ -76,7 +90,9 @@ pub trait UnpinnedPineMap<K: Ord, V> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&mut V, (K, F)>, E>;
+	) -> Result<Result<&mut V, (K, F)>, E>
+	where
+		V: Sized;
 
 	/// Inserts a new value produced by the given factory, but only if no such key exists yet.
 	///
@@ -87,12 +103,15 @@ pub trait UnpinnedPineMap<K: Ord, V> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<&mut V, (K, F)> {
+	) -> Result<&mut V, (K, F)>
+	where
+		V: Sized, // Just for clarity.
+	{
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with_mut::<_, Infallible>(key, |key| {
+		self.try_insert_with_mut(key, |key| {
 			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
-		.expect("unreachable")
+		.unwrap_infallible()
 		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 	}
 
@@ -101,7 +120,10 @@ pub trait UnpinnedPineMap<K: Ord, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_mut(&mut self, key: K, value: V) -> Result<&mut V, (K, V)> {
+	fn insert_mut(&mut self, key: K, value: V) -> Result<&mut V, (K, V)>
+	where
+		V: Sized,
+	{
 		let value = Cell::new(Some(value));
 		self.insert_with_mut(key, |_| value.take().expect("unreachable"))
 			.map_err(|(key, _)| (key, value.take().expect("unreachable")))
@@ -110,12 +132,14 @@ pub trait UnpinnedPineMap<K: Ord, V> {
 	/// Removes and returns a key-value pair if a matching key exists.
 	fn remove_pair<Q>(&mut self, key: &Q) -> Option<(K, V)>
 	where
+		V: Sized,
 		K: Borrow<Q>,
 		Q: Ord + ?Sized;
 
 	/// Removes and returns a key-value pair if a matching key exists.
 	fn remove_value<Q>(&mut self, key: &Q) -> Option<V>
 	where
+		V: Sized,
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
 	{
@@ -146,12 +170,111 @@ pub trait UnpinnedPineMap<K: Ord, V> {
 	}
 }
 
+pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W> {
+	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with<F: for<'a> FnOnce(&K, &'a mut MaybeUninit<W>) -> Result<&'a mut V, E>, E>(
+		&self,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<&V, (K, F)>, E>;
+
+	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with<F: for<'a> FnOnce(&K, &'a mut MaybeUninit<W>) -> &'a mut V>(
+		&self,
+		key: K,
+		value_factory: F,
+	) -> Result<&V, (K, F)> {
+		let value_factory = Cell::new(Some(value_factory));
+		self.try_emplace_with(key, |key, slot| {
+			value_factory.take().expect("unreachable")(key, slot).pipe(Ok)
+		})
+		.unwrap_infallible()
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+	}
+
+	/// Emplaces a new value, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace(&self, key: K, value: W) -> Result<&V, (K, W)>
+	where
+		W: BorrowMut<V>,
+	{
+		let value = Cell::new(Some(value));
+		self.emplace_with(key, |_, slot| {
+			slot.write(value.take().expect("unreachable")).borrow_mut()
+		})
+		.map_err(|(key, _)| (key, value.take().expect("unreachable")))
+	}
+
+	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with_mut<
+		F: for<'a> FnOnce(&K, &'a mut MaybeUninit<W>) -> Result<&'a mut V, E>,
+		E,
+	>(
+		&mut self,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<&mut V, (K, F)>, E>;
+
+	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with_mut<F: for<'a> FnOnce(&K, &'a mut MaybeUninit<W>) -> &'a mut V>(
+		&mut self,
+		key: K,
+		value_factory: F,
+	) -> Result<&mut V, (K, F)> {
+		let value_factory = Cell::new(Some(value_factory));
+		self.try_emplace_with_mut(key, |key, slot| {
+			value_factory.take().expect("unreachable")(key, slot).pipe(Ok)
+		})
+		.unwrap_infallible()
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+	}
+
+	/// Emplaces a new value, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_mut(&mut self, key: K, value: W) -> Result<&mut V, (K, W)>
+	where
+		W: BorrowMut<V>,
+	{
+		let value = Cell::new(Some(value));
+		self.emplace_with_mut(key, |_, slot| {
+			slot.write(value.take().expect("unreachable")).borrow_mut()
+		})
+		.map_err(|(key, _)| (key, value.take().expect("unreachable")))
+	}
+}
+
 /// # Safety
 ///
 /// Any implementors must ensure their [`UnpinnedPineMap`] implementation would be valid if all `Value`s were pinned.
 ///
 /// See: [`pin` -> `Drop` guarantee](https://doc.rust-lang.org/std/pin/index.html#drop-guarantee)
-pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
+pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized>: UnpinnedPineMap<K, V> {
 	/// Returns a reference to the value corresponding to the key.
 	///
 	/// The key may be any borrowed form of the map's key type,
@@ -178,7 +301,10 @@ pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
 		self: Pin<&Self>,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<Pin<&V>, (K, F)>, E> {
+	) -> Result<Result<Pin<&V>, (K, F)>, E>
+	where
+		V: Sized,
+	{
 		unsafe {
 			<Self as UnpinnedPineMap<_, _>>::try_insert_with(&*self, key, value_factory)
 				.map(|inner| inner.map(|value| Pin::new_unchecked(&*(value as *const _))))
@@ -194,12 +320,15 @@ pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
 		self: Pin<&Self>,
 		key: K,
 		value_factory: F,
-	) -> Result<Pin<&V>, (K, F)> {
+	) -> Result<Pin<&V>, (K, F)>
+	where
+		V: Sized, // Just for clarity.
+	{
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with::<_, Infallible>(key, |key| {
+		self.try_insert_with(key, |key| {
 			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
-		.expect("unreachable")
+		.unwrap_infallible()
 		.map_err(|(k, _)| (k, value_factory.take().expect("unreachable")))
 	}
 
@@ -208,7 +337,10 @@ pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert(self: Pin<&Self>, key: K, value: V) -> Result<Pin<&V>, (K, V)> {
+	fn insert(self: Pin<&Self>, key: K, value: V) -> Result<Pin<&V>, (K, V)>
+	where
+		V: Sized,
+	{
 		let value = Cell::new(Some(value));
 		self.insert_with(key, |_| value.take().expect("unreachable"))
 			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
@@ -249,7 +381,10 @@ pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
 		self: Pin<&mut Self>,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<Pin<&mut V>, (K, F)>, E> {
+	) -> Result<Result<Pin<&mut V>, (K, F)>, E>
+	where
+		V: Sized,
+	{
 		unsafe {
 			<Self as UnpinnedPineMap<_, _>>::try_insert_with_mut(
 				self.get_unchecked_mut(),
@@ -269,12 +404,15 @@ pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
 		self: Pin<&mut Self>,
 		key: K,
 		value_factory: F,
-	) -> Result<Pin<&mut V>, (K, F)> {
+	) -> Result<Pin<&mut V>, (K, F)>
+	where
+		V: Sized, // Just for clarity.
+	{
 		let value_factory = Cell::new(Some(value_factory));
-		self.try_insert_with_mut::<_, Infallible>(key, |key| {
+		self.try_insert_with_mut(key, |key| {
 			value_factory.take().expect("unreachable")(key).pipe(Ok)
 		})
-		.expect("unreachable")
+		.unwrap_infallible()
 		.map_err(|(k, _)| (k, value_factory.take().expect("unreachable")))
 	}
 
@@ -283,7 +421,10 @@ pub unsafe trait PinnedPineMap<K: Ord, V>: UnpinnedPineMap<K, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_mut(self: Pin<&mut Self>, key: K, value: V) -> Result<Pin<&mut V>, (K, V)> {
+	fn insert_mut(self: Pin<&mut Self>, key: K, value: V) -> Result<Pin<&mut V>, (K, V)>
+	where
+		V: Sized,
+	{
 		let value = Cell::new(Some(value));
 		self.insert_with_mut(key, |_| value.take().expect("unreachable"))
 			.map_err(|(k, _)| (k, value.take().expect("unreachable")))
