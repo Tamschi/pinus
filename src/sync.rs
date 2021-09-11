@@ -1,3 +1,5 @@
+//! Thread-safe b-trees.
+
 use crate::prelude::{
 	PinnedPineMap, PinnedPineMapEmplace, UnpinnedPineMap, UnpinnedPineMapEmplace,
 };

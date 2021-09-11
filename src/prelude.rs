@@ -1,3 +1,5 @@
+//! The meat of the API.
+
 use crate::UnwrapInfallible;
 use std::{
 	borrow::{Borrow, BorrowMut},
