@@ -1,4 +1,6 @@
-use crate::prelude::{PinnedPineMap, UnpinnedPineMap, UnpinnedPineMapEmplace};
+use crate::prelude::{
+	PinnedPineMap, PinnedPineMapEmplace, UnpinnedPineMap, UnpinnedPineMapEmplace,
+};
 use bumpalo::Bump;
 use parking_lot::RwLock;
 use std::{
@@ -10,11 +12,22 @@ use std::{
 use tap::{Pipe, TapFallible};
 use vec1::Vec1;
 
+/// A [`BTreeMap`] that allows pin-projection to its values and additions through shared references.
+///
+/// See also [`PressedPineMap`] to store trait objects efficiently.
+///
+/// See [`UnpinnedPineMap`], [`UnpinnedPineMapEmplace`], [`PinnedPineMap`] and [`PinnedPineMapEmplace`] for the full API.
 pub struct PineMap<K: Ord, V> {
 	contents: RwLock<Cambium<K, V>>,
 	_pin: PhantomPinned,
 }
 
+/// A [`BTreeMap`] that allows pin-projection to its values and additions through shared references.
+///
+/// Unlike [`PineMap`], this one can store heterogeneous trait objects fairly efficiently.
+/// As a tradeoff, memory used to store values is not reused until the collection is dropped or cleared.
+///
+/// See [`UnpinnedPineMap`], [`UnpinnedPineMapEmplace`], [`PinnedPineMap`] and [`PinnedPineMapEmplace`] for the full API.
 pub struct PressedPineMap<K: Ord, V: ?Sized> {
 	contents: RwLock<PressedCambium<K, V>>,
 	_pin: PhantomPinned,
@@ -439,6 +452,9 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 
 unsafe impl<K: Ord, V> PinnedPineMap<K, V> for PineMap<K, V> {}
 unsafe impl<K: Ord, V: ?Sized> PinnedPineMap<K, V> for PressedPineMap<K, V> {}
+
+unsafe impl<K: Ord, V> PinnedPineMapEmplace<K, V, V> for PineMap<K, V> {}
+unsafe impl<K: Ord, V: ?Sized, W> PinnedPineMapEmplace<K, V, W> for PressedPineMap<K, V> {}
 
 unsafe impl<K: Ord, V> Sync for PineMap<K, V>
 where

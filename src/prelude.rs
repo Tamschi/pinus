@@ -3,6 +3,7 @@ use std::{
 	borrow::{Borrow, BorrowMut},
 	cell::Cell,
 	mem::MaybeUninit,
+	ops::Deref,
 	pin::Pin,
 };
 use tap::Pipe;
@@ -271,7 +272,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W> {
 
 /// # Safety
 ///
-/// Any implementors must ensure their [`UnpinnedPineMap`] implementation would be valid if all `Value`s were pinned.
+/// Any implementors must ensure their [`UnpinnedPineMap`] implementation would be valid if all `V`alues were pinned.
 ///
 /// See: [`pin` -> `Drop` guarantee](https://doc.rust-lang.org/std/pin/index.html#drop-guarantee)
 pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized>: UnpinnedPineMap<K, V> {
@@ -456,5 +457,153 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized>: UnpinnedPineMap<K, V> {
 		Q: Ord + ?Sized,
 	{
 		self.remove_key(key).is_some()
+	}
+}
+
+/// # Safety
+///
+/// Any implementors must ensure their [`UnpinnedPineMapEmplace`] implementation would be valid if all `V`alues were pinned.
+///
+/// See: [`pin` -> `Drop` guarantee](https://doc.rust-lang.org/std/pin/index.html#drop-guarantee)
+pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:
+	UnpinnedPineMapEmplace<K, V, W>
+{
+	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with<
+		F: for<'a> FnOnce(&K, Pin<&'a mut MaybeUninit<W>>) -> Result<Pin<&'a mut V>, E>,
+		E,
+	>(
+		self: Pin<&Self>,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<Pin<&V>, (K, F)>, E> {
+		let value_factory = Cell::new(Some(value_factory));
+		unsafe {
+			self.deref()
+				.try_emplace_with(key, |key, slot| {
+					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
+						.map(|value| Pin::into_inner_unchecked(value))
+				})?
+				.map(|value| Pin::new_unchecked(&*(value as *const _)))
+				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+				.pipe(Ok)
+		}
+	}
+
+	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with<F: for<'a> FnOnce(&K, Pin<&'a mut MaybeUninit<W>>) -> Pin<&'a mut V>>(
+		self: Pin<&Self>,
+		key: K,
+		value_factory: F,
+	) -> Result<Pin<&V>, (K, F)> {
+		let value_factory = Cell::new(Some(value_factory));
+		unsafe {
+			self.deref()
+				.emplace_with(key, |key, slot| {
+					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
+						.pipe(|value| Pin::into_inner_unchecked(value))
+				})
+				.map(|value| Pin::new_unchecked(&*(value as *const _)))
+				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+		}
+	}
+
+	/// Emplaces a new value, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace(self: Pin<&Self>, key: K, value: W) -> Result<Pin<&V>, (K, W)>
+	where
+		W: BorrowMut<V>,
+	{
+		let value = Cell::new(Some(value));
+		unsafe {
+			self.deref()
+				.emplace_with(key, |_, slot| {
+					slot.write(value.take().expect("unreachable")).borrow_mut()
+				})
+				.map(|value| Pin::new_unchecked(&*(value as *const _)))
+				.map_err(|(key, _)| (key, value.take().expect("unreachable")))
+		}
+	}
+	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with_mut<
+		F: for<'a> FnOnce(&K, Pin<&'a mut MaybeUninit<W>>) -> Result<Pin<&'a mut V>, E>,
+		E,
+	>(
+		self: Pin<&mut Self>,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<Pin<&mut V>, (K, F)>, E> {
+		let value_factory = Cell::new(Some(value_factory));
+		unsafe {
+			Pin::into_inner_unchecked(self)
+				.try_emplace_with_mut(key, |key, slot| {
+					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
+						.map(|value| Pin::into_inner_unchecked(value))
+				})?
+				.map(|value| Pin::new_unchecked(value))
+				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+				.pipe(Ok)
+		}
+	}
+
+	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with_mut<F: for<'a> FnOnce(&K, Pin<&'a mut MaybeUninit<W>>) -> Pin<&'a mut V>>(
+		self: Pin<&mut Self>,
+		key: K,
+		value_factory: F,
+	) -> Result<Pin<&mut V>, (K, F)> {
+		let value_factory = Cell::new(Some(value_factory));
+		unsafe {
+			Pin::into_inner_unchecked(self)
+				.emplace_with_mut(key, |key, slot| {
+					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
+						.pipe(|value| Pin::into_inner_unchecked(value))
+				})
+				.map(|value| Pin::new_unchecked(value))
+				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+		}
+	}
+
+	/// Emplaces a new value, but only if no such key exists yet.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_mut(self: Pin<&mut Self>, key: K, value: W) -> Result<Pin<&mut V>, (K, W)>
+	where
+		W: BorrowMut<V>,
+	{
+		let value = Cell::new(Some(value));
+		unsafe {
+			Pin::into_inner_unchecked(self)
+				.emplace_with_mut(key, |_, slot| {
+					slot.write(value.take().expect("unreachable")).borrow_mut()
+				})
+				.map(|value| Pin::new_unchecked(value))
+				.map_err(|(key, _)| (key, value.take().expect("unreachable")))
+		}
 	}
 }
