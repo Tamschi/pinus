@@ -43,7 +43,7 @@ struct Cambium<K, V> {
 
 struct PressedCambium<K, V: ?Sized> {
 	addresses: BTreeMap<K, *mut V>,
-	values: Bump,
+	memory: Bump,
 	// We can't determine (cross-architecture) if we actually own the value pointers,
 	// because pointer comparisons not from within the same allocation aren't meaningful,
 	// so we can't derive holes on value removal.
@@ -89,7 +89,7 @@ impl<K: Ord, V: ?Sized> PressedPineMap<K, V> {
 		Self {
 			contents: RwLock::new(PressedCambium {
 				addresses: BTreeMap::new(),
-				values: Bump::new(),
+				memory: Bump::new(),
 			}),
 			_pin: PhantomPinned,
 		}
@@ -102,7 +102,7 @@ impl<K: Ord, V: ?Sized> PressedPineMap<K, V> {
 		Self {
 			contents: RwLock::new(PressedCambium {
 				addresses: BTreeMap::new(),
-				values: Bump::with_capacity(capacity_bytes),
+				memory: Bump::with_capacity(capacity_bytes),
 			}),
 			_pin: PhantomPinned,
 		}
@@ -149,30 +149,13 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 
 		contents.holes.clear();
 
-		if mem::needs_drop::<V>() {
-			// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
-			let mut values = mem::take(&mut contents.addresses)
-				.into_iter()
-				.map(|(_, value)| value);
-			catch_unwind({
-				let values = AssertUnwindSafe(values.by_ref());
-				|| {
-					for value in values.0 {
-						unsafe { value.drop_in_place() }
-					}
-				}
-			})
-			.unwrap_or_else(|panic| {
-				for value in values {
-					catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })).ok();
-				}
-				panic::resume_unwind(panic)
-			})
-		} else {
-			contents.addresses.clear()
-		}
+		let success = catch_unwind(AssertUnwindSafe(|| {
+			drop_all_pinned(mem::take(&mut contents.addresses))
+		}));
 
 		contents.memory.reset();
+
+		success.unwrap_or_else(|panic| panic::resume_unwind(panic));
 	}
 
 	fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
@@ -253,12 +236,13 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 	fn clear(&mut self) {
 		let contents = self.contents.get_mut(/* poisoned */);
 
-		// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
-		for (_, value) in mem::take(&mut contents.addresses) {
-			unsafe { value.drop_in_place() }
-		}
+		let success = catch_unwind(AssertUnwindSafe(|| {
+			drop_all_pinned(mem::take(&mut contents.addresses))
+		}));
 
-		contents.values.reset()
+		contents.memory.reset();
+
+		success.unwrap_or_else(|panic| panic::resume_unwind(panic));
 	}
 
 	fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
@@ -385,12 +369,12 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 		value_factory: F,
 	) -> Result<Result<&V, (K, F)>, E> {
 		let mut contents = self.contents.write(/* poisoned */);
-		let PressedCambium { addresses, values } = &mut *contents;
+		let PressedCambium { addresses, memory } = &mut *contents;
 		#[allow(clippy::map_entry)]
 		if addresses.contains_key(&key) {
 			Err((key, value_factory))
 		} else {
-			let value = value_factory(&key, values.alloc(MaybeUninit::uninit()))?;
+			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
 			addresses.insert(key, value as *mut _);
 			Ok(unsafe { &*(value as *const _) })
 		}
@@ -405,12 +389,12 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 		key: K,
 		value_factory: F,
 	) -> Result<Result<&mut V, (K, F)>, E> {
-		let PressedCambium { addresses, values } = self.contents.get_mut(/* poisoned */);
+		let PressedCambium { addresses, memory } = self.contents.get_mut(/* poisoned */);
 		#[allow(clippy::map_entry)]
 		if addresses.contains_key(&key) {
 			Err((key, value_factory))
 		} else {
-			let value = value_factory(&key, values.alloc(MaybeUninit::uninit()))?;
+			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
 			addresses.insert(key, value as *mut _);
 			Ok(unsafe { &mut *(value as *mut _) })
 		}
@@ -464,24 +448,7 @@ impl<K: Ord, V> Drop for PineMap<K, V> {
 
 		let contents = self.contents.get_mut(/* poisoned */);
 
-		// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
-		let mut values = mem::take(&mut contents.addresses)
-			.into_iter()
-			.map(|(_, value)| value);
-		catch_unwind({
-			let values = AssertUnwindSafe(values.by_ref());
-			|| {
-				for value in values.0 {
-					unsafe { value.drop_in_place() }
-				}
-			}
-		})
-		.unwrap_or_else(|panic| {
-			for value in values {
-				catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })).ok();
-			}
-			panic::resume_unwind(panic)
-		})
+		drop_all_pinned(mem::take(&mut contents.addresses));
 	}
 }
 
@@ -491,8 +458,26 @@ impl<K: Ord, V: ?Sized> Drop for PressedPineMap<K, V> {
 		// so explicit cleanup can be a bit more concise (and hopefully a little faster) than calling `.clean()`.
 
 		let contents = self.contents.get_mut(/* poisoned */);
-		for (_, value) in mem::take(&mut contents.addresses) {
-			unsafe { value.drop_in_place() }
-		}
+
+		drop_all_pinned(mem::take(&mut contents.addresses));
 	}
+}
+
+fn drop_all_pinned<K, V: ?Sized>(addresses: BTreeMap<K, *mut V>) {
+	// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
+	let mut values = addresses.into_iter().map(|(_, value)| value);
+	catch_unwind({
+		let values = AssertUnwindSafe(values.by_ref());
+		|| {
+			for value in values.0 {
+				unsafe { value.drop_in_place() }
+			}
+		}
+	})
+	.unwrap_or_else(|panic| {
+		for value in values {
+			catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })).ok();
+		}
+		panic::resume_unwind(panic)
+	})
 }

@@ -14,7 +14,7 @@ TODO: Date
   - Added an emplacement API and an alternative implementation for heterogeneous trait objects.
 
 - Revisions:
-  - Collections will now aggressively drop further values during [`PinnedPineMap.clear`](https://docs.rs/pinus/0.0.2/pinus/prelude/trait.PinnedPineMap.html#method.clear) and [`Drop::drop`](https://doc.rust-lang.org/stable/std/ops/trait.Drop.html#tymethod.drop) even if a panic occurs along the way. (TODO)
+  - Collections will now aggressively drop further values during [`PinnedPineMap.clear`](https://docs.rs/pinus/0.0.2/pinus/prelude/trait.PinnedPineMap.html#method.clear) and [`Drop::drop`](https://doc.rust-lang.org/stable/std/ops/trait.Drop.html#tymethod.drop) even if a panic occurs along the way.
 
     **This was most likely previously unsound, so version 0.0.1 will be yanked.**
 
