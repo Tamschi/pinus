@@ -330,12 +330,18 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 			.read()
 	}
 
+	/// Access the unpinned API.
 	fn as_unpinned(&self) -> &Self::Unpinned {
-		unsafe { &*(self as *const Self as *const Self::Unpinned) }
+		unsafe { &*(self as *const Self).cast() }
 	}
 
+	/// Access the unpinned mutable API.
+	///
+	/// # Safety
+	///
+	/// Pinning invariants for any remaining values `V` must still be upheld.
 	unsafe fn as_unpinned_mut(&mut self) -> &mut Self::Unpinned {
-		&mut *(self as *mut Self as *mut Self::Unpinned)
+		&mut *(self as *mut Self).cast()
 	}
 
 	/// Returns a reference to the value corresponding to the key.

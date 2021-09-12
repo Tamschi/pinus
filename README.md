@@ -93,8 +93,8 @@ fn main() {
 
 
   // Now on to part 2, pin projection:
-  let mut map: Pin<&_> = pin!(map).as_ref();
-  let mut mut_map: Pin<&mut _> = pin!(mut_map);
+  let mut map: Pin<_> = map.pin();
+  let mut mut_map: Pin<_> = mut_map.pin();
 
 
   // Shared references are now pinned:
@@ -111,18 +111,18 @@ fn main() {
 
 
   // Exclusive references are also pinned:
-  let mut mut_a: Pin<&mut String> = mut_map.as_mut().insert_with_mut("Hi!", |k| k.to_string())
+  let mut mut_a: Pin<&mut String> = mut_map.insert_with_mut("Hi!", |k| k.to_string())
     .map_err(|(key, _factory)| key).unwrap();
 
-  let mut mut_a2: Pin<&mut String> = mut_map.as_mut().get_mut_pinned("Hi!").unwrap();
+  let mut mut_a2: Pin<&mut String> = mut_map.get_mut_pinned("Hi!").unwrap();
 
   // The `…_mut` methods are actually faster, but their results can't be held onto at once:
   // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
 
   // Only keys can be removed now, but values must be dropped in place:
-  mut_map.as_mut().clear();
-  let _: Option<&str> = mut_map.as_mut().remove_key("C");
-  let _: bool = mut_map.as_mut().drop_entry("D");
+  mut_map.clear();
+  let _: Option<&str> = mut_map.remove_key("C");
+  let _: bool = mut_map.drop_entry("D");
 }
 ```
 
