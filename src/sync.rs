@@ -152,9 +152,14 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 
 		contents.holes.clear();
 
-		let success = catch_unwind(AssertUnwindSafe(|| {
-			drop_all_pinned(mem::take(&mut contents.addresses))
-		}));
+		let success = if mem::needs_drop::<V>() {
+			catch_unwind(AssertUnwindSafe(|| {
+				drop_all_pinned(mem::take(&mut contents.addresses))
+			}))
+		} else {
+			contents.addresses.clear();
+			Ok(())
+		};
 
 		contents.memory.reset();
 
