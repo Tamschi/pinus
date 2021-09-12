@@ -476,19 +476,38 @@ impl<K: Ord, V: ?Sized> Drop for PressedPineMap<K, V> {
 }
 
 fn drop_all_pinned<K, V: ?Sized>(addresses: BTreeMap<K, *mut V>) {
+	use std::any::Any;
+
+	/// This MUST be a distinct type.
+	struct DoublePanics(Box<dyn Any + Send>, Box<dyn Any + Send>);
+
 	// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
-	let mut values = addresses.into_iter().map(|(_, value)| value);
+	let mut values = addresses.into_iter();
 	catch_unwind({
 		let values = AssertUnwindSafe(values.by_ref());
 		|| {
-			for value in values.0 {
-				unsafe { value.drop_in_place() }
+			for (key, value) in values.0 {
+				match catch_unwind(AssertUnwindSafe(|| drop(key))) {
+					Ok(()) => unsafe { value.drop_in_place() },
+					Err(key_panic) => {
+						match catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })) {
+							Ok(()) => panic::resume_unwind(key_panic),
+							Err(value_panic) => {
+								panic::resume_unwind(Box::new(DoublePanics(key_panic, value_panic)))
+							}
+						}
+					}
+				}
 			}
 		}
 	})
 	.unwrap_or_else(|panic| {
-		let mut panics = vec![panic];
-		for value in values {
+		let mut panics = match panic.downcast::<DoublePanics>() {
+			Ok(boxed_double) => vec![boxed_double.0, boxed_double.1],
+			Err(plain) => vec![plain],
+		};
+		for (key, value) in values {
+			catch_unwind(AssertUnwindSafe(|| drop(key))).unwrap_or_else(|panic| panics.push(panic));
 			catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() }))
 				.unwrap_or_else(|panic| panics.push(panic));
 		}
