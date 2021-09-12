@@ -49,17 +49,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
-name = "ergo-pin"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bc1eb88aabef58f4b6ebfa4e5d644bf6e832a39a0fba225c120605580f4a30b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "form_urlencoded"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -184,7 +173,6 @@ dependencies = [
  "bumpalo",
  "cargo-husky",
  "doc-comment",
- "ergo-pin",
  "git_info",
  "parking_lot",
  "tap",

@@ -37,7 +37,6 @@ tap = "1.0.1"
 [dev-dependencies]
 cargo-husky = "1.5.0"
 doc-comment = "0.3.3"
-ergo-pin = "0.1.0"
 git_info = "0.1.2"
 version-sync = "0.9.1"
 wasm-bindgen-test = "0.3.27"

@@ -45,85 +45,80 @@ cargo add pinus
 ## Example
 
 ```rust
-use ergo_pin::ergo_pin;
 use pinus::{prelude::*, sync::PineMap};
 use std::{convert::Infallible, pin::Pin};
 
-#[ergo_pin]
-fn main() {
-
-  // `PineMap` is interior-mutable, so either is useful:
-  let map = PineMap::new();
-  let mut mut_map = PineMap::new();
+// `PineMap` is interior-mutable, so either is useful:
+let map = PineMap::new();
+let mut mut_map = PineMap::new();
 
 
-  // Get parallel shared references by inserting like this:
-  let a: &String = map.insert("Hello!", "Hello!".to_string())
-    .unwrap(/* Your data back if the entry already existed. */);
-  let b: &String = map.insert_with("Hello again!", |k| k.to_string())
-    .map_err(|(key, _factory)| key).unwrap();
-  let c: &String = map.try_insert_with::<_, Infallible>("Hello once again!", |k| Ok(k.to_string()))
-    .unwrap(/* Error from factory. */)
-    .map_err(|(key, _factory)| key).unwrap();
+// Get parallel shared references by inserting like this:
+let a: &String = map.insert("Hello!", "Hello!".to_string())
+  .unwrap(/* Your data back if the entry already existed. */);
+let b: &String = map.insert_with("Hello again!", |k| k.to_string())
+  .map_err(|(key, _factory)| key).unwrap();
+let c: &String = map.try_insert_with::<_, Infallible>("Hello once again!", |k| Ok(k.to_string()))
+  .unwrap(/* Error from factory. */)
+  .map_err(|(key, _factory)| key).unwrap();
 
-  let a2: &String = map.get("Hello!").unwrap();
+let a2: &String = map.get("Hello!").unwrap();
 
-  let _ = (a, a2, b, c);
-
-
-  // Get exclusive references like this (also with or without factory):
-  let mut_a: &mut String = mut_map.insert_with_mut("Hi!", |k| k.to_string())
-    .map_err(|(key, _factory)| key).unwrap();
-
-  let mut_a2: &mut String = mut_map.get_mut("Hi!").unwrap();
-
-  // The `…_mut` methods are actually faster, but their results can't be held onto at once:
-  // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
+let _ = (a, a2, b, c);
 
 
-  // Remove entries like this:
-  mut_map.clear();
-  let _: Option<(&str, String)> = mut_map.remove_pair("A");
-  let _: Option<String> = mut_map.remove_value("B");
-  let _: Option<&str> = mut_map.remove_key("C");
-  let _: bool = mut_map.drop_entry("D");
+// Get exclusive references like this (also with or without factory):
+let mut_a: &mut String = mut_map.insert_with_mut("Hi!", |k| k.to_string())
+  .map_err(|(key, _factory)| key).unwrap();
+
+let mut_a2: &mut String = mut_map.get_mut("Hi!").unwrap();
+
+// The `…_mut` methods are actually faster, but their results can't be held onto at once:
+// let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
 
 
-  /////
+// Remove entries like this:
+mut_map.clear();
+let _: Option<(&str, String)> = mut_map.remove_pair("A");
+let _: Option<String> = mut_map.remove_value("B");
+let _: Option<&str> = mut_map.remove_key("C");
+let _: bool = mut_map.drop_entry("D");
 
 
-  // Now on to part 2, pin projection:
-  let mut map: Pin<_> = map.pin();
-  let mut mut_map: Pin<_> = mut_map.pin();
+/////
 
 
-  // Shared references are now pinned:
-  let a: Pin<&String> = map.insert("Hello!!", "Hello!!".to_string())
-    .unwrap();
-  let b: Pin<&String> = map.insert_with("Hello again!!", |k| k.to_string())
-    .ok().unwrap();
-  let c: Pin<&String> = map.try_insert_with::<_, Infallible>("Hello once again!!", |k| Ok(k.to_string()))
-    .unwrap().ok().unwrap();
-
-  let a2: Pin<&String> = map.get("Hello!").unwrap();
-
-  let _ = (a, a2, b, c);
+// Now on to part 2, pin projection:
+let mut map: Pin<_> = map.pin();
+let mut mut_map: Pin<_> = mut_map.pin();
 
 
-  // Exclusive references are also pinned:
-  let mut mut_a: Pin<&mut String> = mut_map.insert_with_mut("Hi!", |k| k.to_string())
-    .map_err(|(key, _factory)| key).unwrap();
+// Shared references are now pinned:
+let a: Pin<&String> = map.insert("Hello!!", "Hello!!".to_string())
+  .unwrap();
+let b: Pin<&String> = map.insert_with("Hello again!!", |k| k.to_string())
+  .ok().unwrap();
+let c: Pin<&String> = map.try_insert_with::<_, Infallible>("Hello once again!!", |k| Ok(k.to_string()))
+  .unwrap().ok().unwrap();
 
-  let mut mut_a2: Pin<&mut String> = mut_map.get_mut_pinned("Hi!").unwrap();
+let a2: Pin<&String> = map.get("Hello!").unwrap();
 
-  // The `…_mut` methods are actually faster, but their results can't be held onto at once:
-  // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
+let _ = (a, a2, b, c);
 
-  // Only keys can be removed now, but values must be dropped in place:
-  mut_map.clear();
-  let _: Option<&str> = mut_map.remove_key("C");
-  let _: bool = mut_map.drop_entry("D");
-}
+
+// Exclusive references are also pinned:
+let mut mut_a: Pin<&mut String> = mut_map.insert_with_mut("Hi!", |k| k.to_string())
+  .map_err(|(key, _factory)| key).unwrap();
+
+let mut mut_a2: Pin<&mut String> = mut_map.get_mut_pinned("Hi!").unwrap();
+
+// The `…_mut` methods are actually faster, but their results can't be held onto at once:
+// let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
+
+// Only keys can be removed now, but values must be dropped in place:
+mut_map.clear();
+let _: Option<&str> = mut_map.remove_key("C");
+let _: bool = mut_map.drop_entry("D");
 ```
 
 ## License
