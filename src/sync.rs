@@ -10,6 +10,7 @@ use std::{
 	collections::BTreeMap,
 	marker::PhantomPinned,
 	mem::{self, MaybeUninit},
+	num::NonZeroUsize,
 };
 use tap::{Pipe, TapFallible};
 use vec1::Vec1;
@@ -71,6 +72,20 @@ impl<K: Ord, V> PineMap<K, V> {
 			_pin: PhantomPinned,
 		}
 	}
+
+	/// Creates a new empty [`PineMap`] that will store values contiguously
+	/// until `capacity` (in concurrently live entries) is exceeded.
+	#[must_use]
+	pub fn with_capacity(capacity: NonZeroUsize) -> Self {
+		Self {
+			contents: RwLock::new(Cambium {
+				slot_map: BTreeMap::new(),
+				values: Vec1::new(Vec::with_capacity(capacity.get())),
+				holes: Vec::new(),
+			}),
+			_pin: PhantomPinned,
+		}
+	}
 }
 
 impl<K: Ord, V: ?Sized> PressedPineMap<K, V> {
@@ -81,6 +96,19 @@ impl<K: Ord, V: ?Sized> PressedPineMap<K, V> {
 			contents: RwLock::new(PressedCambium {
 				addresses: BTreeMap::new(),
 				values: Bump::new(),
+			}),
+			_pin: PhantomPinned,
+		}
+	}
+
+	/// Creates a new empty [`PressedPineMap`] that will store values (almost) contiguously
+	/// until `capacity` (in bytes that are the size of a maximally aligned buffer!) are exceeded.
+	#[must_use]
+	pub fn with_capacity(capacity_bytes: usize) -> Self {
+		Self {
+			contents: RwLock::new(PressedCambium {
+				addresses: BTreeMap::new(),
+				values: Bump::with_capacity(capacity_bytes),
 			}),
 			_pin: PhantomPinned,
 		}
