@@ -8,7 +8,6 @@ use parking_lot::RwLock;
 use std::{
 	cell::Cell,
 	collections::BTreeMap,
-	marker::PhantomPinned,
 	mem::{self, MaybeUninit},
 	panic::{self, catch_unwind, AssertUnwindSafe},
 	pin::Pin,
@@ -22,7 +21,6 @@ use tap::{Pipe, TapFallible};
 /// See [`UnpinnedPineMap`], [`UnpinnedPineMapEmplace`], [`PinnedPineMap`] and [`PinnedPineMapEmplace`] for the full API.
 pub struct PineMap<K: Ord, V> {
 	contents: RwLock<Cambium<K, V>>,
-	_pin: PhantomPinned,
 }
 
 /// A [`BTreeMap`] that allows pin-projection to its values and additions through shared references.
@@ -33,7 +31,6 @@ pub struct PineMap<K: Ord, V> {
 /// See [`UnpinnedPineMap`], [`UnpinnedPineMapEmplace`], [`PinnedPineMap`] and [`PinnedPineMapEmplace`] for the full API.
 pub struct PressedPineMap<K: Ord, V: ?Sized> {
 	contents: RwLock<PressedCambium<K, V>>,
-	_pin: PhantomPinned,
 }
 
 struct Cambium<K, V> {
@@ -64,7 +61,6 @@ impl<K: Ord, V> PineMap<K, V> {
 				memory: Bump::new(),
 				holes: Vec::new(),
 			}),
-			_pin: PhantomPinned,
 		}
 	}
 
@@ -78,7 +74,6 @@ impl<K: Ord, V> PineMap<K, V> {
 				memory: Bump::with_capacity(capacity),
 				holes: Vec::new(),
 			}),
-			_pin: PhantomPinned,
 		}
 	}
 }
@@ -92,7 +87,6 @@ impl<K: Ord, V: ?Sized> PressedPineMap<K, V> {
 				addresses: BTreeMap::new(),
 				memory: Bump::new(),
 			}),
-			_pin: PhantomPinned,
 		}
 	}
 
@@ -105,7 +99,6 @@ impl<K: Ord, V: ?Sized> PressedPineMap<K, V> {
 				addresses: BTreeMap::new(),
 				memory: Bump::with_capacity(capacity_bytes),
 			}),
-			_pin: PhantomPinned,
 		}
 	}
 }
@@ -449,9 +442,6 @@ where
 	V: Sync + Send,
 {
 }
-
-impl<K: Ord, V> Unpin for PineMap<K, V> where V: Unpin {}
-impl<K: Ord, V: ?Sized> Unpin for PressedPineMap<K, V> where V: Unpin {}
 
 /// # Panics
 ///
