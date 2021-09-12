@@ -484,6 +484,14 @@ pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:
 {
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
 	///
+	/// # Safety
+	///
+	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	/// but only that that entire allocation will remain untouched for `'a`.
+	///
+	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
+	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	///
 	/// # Errors
 	///
 	/// Outer error: Iff `value_factory` fails.
@@ -512,6 +520,14 @@ pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:
 
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
 	///
+	/// # Safety
+	///
+	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	/// but only that that entire allocation will remain untouched for `'a`.
+	///
+	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
+	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	///
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
@@ -534,6 +550,14 @@ pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:
 
 	/// Emplaces a new value, but only if no such key exists yet.
 	///
+	/// # Safety
+	///
+	/// Note that there is no drop guarantee for `W`
+	/// (and that type will in fact not have its [`Drop::drop`] called directly)!
+	///
+	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
+	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	///
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
@@ -552,6 +576,14 @@ pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:
 		}
 	}
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// # Safety
+	///
+	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	/// but only that that entire allocation will remain untouched for `'a`.
+	///
+	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
+	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
@@ -581,6 +613,14 @@ pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:
 
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
 	///
+	/// # Safety
+	///
+	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	/// but only that that entire allocation will remain untouched for `'a`.
+	///
+	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
+	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	///
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
@@ -602,6 +642,14 @@ pub unsafe trait PinnedPineMapEmplace<K: Ord, V: ?Sized, W>:
 	}
 
 	/// Emplaces a new value, but only if no such key exists yet.
+	///
+	/// # Safety
+	///
+	/// Note that there is no drop guarantee for `W`
+	/// (and that type will in fact not have its [`Drop::drop`] called directly)!
+	///
+	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
+	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
