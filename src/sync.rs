@@ -6,15 +6,13 @@ use crate::prelude::{
 use bumpalo::Bump;
 use parking_lot::RwLock;
 use std::{
-	cell::{Cell, UnsafeCell},
+	cell::Cell,
 	collections::BTreeMap,
 	marker::PhantomPinned,
 	mem::{self, MaybeUninit},
-	num::NonZeroUsize,
 	panic::{self, catch_unwind, AssertUnwindSafe},
 };
 use tap::{Pipe, TapFallible};
-use vec1::Vec1;
 
 /// A [`BTreeMap`] that allows pin-projection to its values and additions through shared references.
 ///
@@ -38,10 +36,9 @@ pub struct PressedPineMap<K: Ord, V: ?Sized> {
 }
 
 struct Cambium<K, V> {
-	slot_map: BTreeMap<K, (usize, usize)>,
-	// In practice this is just `ManuallyDrop` at rest, but I can't reborrow the `Vec` appropriately.
-	values: Vec1<Vec<UnsafeCell<MaybeUninit<V>>>>,
-	holes: Vec<(usize, usize)>,
+	addresses: BTreeMap<K, *mut V>,
+	memory: Bump,
+	holes: Vec<*mut MaybeUninit<V>>,
 }
 
 struct PressedCambium<K, V: ?Sized> {
@@ -62,12 +59,8 @@ impl<K: Ord, V> PineMap<K, V> {
 	pub fn new() -> Self {
 		Self {
 			contents: RwLock::new(Cambium {
-				slot_map: BTreeMap::new(),
-				values: Vec1::new({
-					let mut vec = Vec::new();
-					vec.reserve(1);
-					vec
-				}),
+				addresses: BTreeMap::new(),
+				memory: Bump::new(),
 				holes: Vec::new(),
 			}),
 			_pin: PhantomPinned,
@@ -77,11 +70,11 @@ impl<K: Ord, V> PineMap<K, V> {
 	/// Creates a new empty [`PineMap`] that will store values contiguously
 	/// until `capacity` (in concurrently live entries) is exceeded.
 	#[must_use]
-	pub fn with_capacity(capacity: NonZeroUsize) -> Self {
+	pub fn with_capacity(capacity: usize) -> Self {
 		Self {
 			contents: RwLock::new(Cambium {
-				slot_map: BTreeMap::new(),
-				values: Vec1::new(Vec::with_capacity(capacity.get())),
+				addresses: BTreeMap::new(),
+				memory: Bump::with_capacity(capacity),
 				holes: Vec::new(),
 			}),
 			_pin: PhantomPinned,
@@ -135,17 +128,7 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		Q: Ord + ?Sized,
 	{
 		let contents = self.contents.read(/* poisoned */);
-		let &(slab, i) = contents.slot_map.get(key)?;
-
-		unsafe {
-			contents
-				.values
-				.get_unchecked(slab)
-				.get_unchecked(i)
-				.get()
-				.pipe(|value| (*value).assume_init_ref())
-		}
-		.pipe(Some)
+		contents.addresses.get(key).map(|value| unsafe { &**value })
 	}
 
 	fn try_insert_with<F: FnOnce(&K) -> Result<V, E>, E>(
@@ -163,54 +146,33 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 
 	fn clear(&mut self) {
 		let contents = self.contents.get_mut(/* poisoned */);
+
 		contents.holes.clear();
 
-		// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
 		if mem::needs_drop::<V>() {
-			let mut occupied_slots = mem::take(&mut contents.slot_map)
+			// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
+			let mut values = mem::take(&mut contents.addresses)
 				.into_iter()
-				.map(|(_, slot)| slot);
+				.map(|(_, value)| value);
 			catch_unwind({
-				let safe_occupied_slots = AssertUnwindSafe(occupied_slots.by_ref());
-				let safe_contents = contents.pipe_borrow_mut(AssertUnwindSafe);
-				move || {
-					for (slab, i) in safe_occupied_slots.0 {
-						unsafe {
-							safe_contents
-								.0
-								.values
-								.get_unchecked_mut(slab)
-								.get_unchecked(i)
-								.get()
-								.pipe(|value| (*value).as_mut_ptr().drop_in_place())
-						}
+				let values = AssertUnwindSafe(values.by_ref());
+				|| {
+					for value in values.0 {
+						unsafe { value.drop_in_place() }
 					}
 				}
 			})
 			.unwrap_or_else(|panic| {
-				for (slab, i) in occupied_slots {
-					let safe_contents = contents.pipe_borrow_mut(AssertUnwindSafe);
-					catch_unwind(move || unsafe {
-						safe_contents
-							.0
-							.values
-							.get_unchecked_mut(slab)
-							.get_unchecked(i)
-							.get()
-							.pipe(|value| (*value).as_mut_ptr().drop_in_place())
-					})
-					.ok();
+				for value in values {
+					catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })).ok();
 				}
 				panic::resume_unwind(panic)
 			})
 		} else {
-			contents.slot_map.clear()
+			contents.addresses.clear()
 		}
 
-		if contents.values.len() > 1 {
-			contents.values.swap_remove(0).expect("unreachable");
-			contents.values.truncate(1).expect("unreachable");
-		}
+		contents.memory.reset();
 	}
 
 	fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
@@ -219,17 +181,10 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		Q: Ord + ?Sized,
 	{
 		let contents = self.contents.get_mut(/* poisoned */);
-		let &(slab, i) = contents.slot_map.get(key)?;
-
-		unsafe {
-			contents
-				.values
-				.get_unchecked(slab)
-				.get_unchecked(i)
-				.get()
-				.pipe(|value| (*value).assume_init_mut())
-		}
-		.pipe(Some)
+		contents
+			.addresses
+			.get(key)
+			.map(|value| unsafe { &mut **value })
 	}
 
 	fn try_insert_with_mut<F: FnOnce(&K) -> Result<V, E>, E>(
@@ -251,17 +206,9 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		Q: Ord + ?Sized,
 	{
 		let contents = self.contents.get_mut(/* poisoned */);
-		let (key, (slab, i)) = contents.slot_map.remove_entry(key)?;
-		contents.holes.push((slab, i));
-		let value = unsafe {
-			contents
-				.values
-				.get_unchecked(slab)
-				.get_unchecked(i)
-				.get()
-				.pipe(|value| (*value).as_ptr().read())
-		};
-		Some((key, value))
+		let (key, value) = contents.addresses.remove_entry(key)?;
+		contents.holes.push(value.cast());
+		Some((key, unsafe { value.read() }))
 	}
 
 	fn remove_key<Q>(&mut self, key: &Q) -> Option<K>
@@ -270,18 +217,9 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		Q: Ord + ?Sized,
 	{
 		let contents = self.contents.get_mut(/* poisoned */);
-		let (key, (slab, i)) = contents.slot_map.remove_entry(key)?;
-		contents.holes.push((slab, i));
-		if mem::needs_drop::<V>() {
-			unsafe {
-				contents
-					.values
-					.get_unchecked(slab)
-					.get_unchecked(i)
-					.get()
-					.pipe(|value| (*value).as_mut_ptr().drop_in_place())
-			}
-		}
+		let (key, value) = contents.addresses.remove_entry(key)?;
+		contents.holes.push(value.cast());
+		unsafe { value.drop_in_place() };
 		Some(key)
 	}
 }
@@ -368,7 +306,9 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 		Q: Ord + ?Sized,
 	{
 		let contents = self.contents.get_mut(/* poisoned */);
-		contents.addresses.remove_entry(key)?.0.pipe(Some)
+		let (key, value) = contents.addresses.remove_entry(key)?;
+		unsafe { value.drop_in_place() };
+		Some(key)
 	}
 }
 
@@ -383,39 +323,21 @@ impl<K: Ord, V> UnpinnedPineMapEmplace<K, V, V> for PineMap<K, V> {
 	) -> Result<Result<&V, (K, F)>, E> {
 		let mut contents = self.contents.write(/* poisoned */);
 		let Cambium {
-			slot_map,
-			values,
+			addresses,
+			memory,
 			holes,
 		} = &mut *contents;
 		#[allow(clippy::map_entry)]
-		if slot_map.contains_key(&key) {
+		if addresses.contains_key(&key) {
 			Err((key, value_factory))
 		} else if let Some(hole) = holes.pop() {
-			let slot =
-				unsafe { values.get_unchecked_mut(hole.0).get_unchecked_mut(hole.1) }.get_mut();
-			let value = value_factory(&key, slot)?;
-			slot_map.insert(key, hole);
+			let slot = unsafe { &mut *hole };
+			let value = value_factory(&key, slot).tap_err(|_| holes.push(hole))?;
+			addresses.insert(key, value as *mut _);
 			Ok(value)
 		} else {
-			let mut slab_i = values.len() - 1;
-			let slab = values.last_mut();
-			let slab = if slab.len() < Vec::capacity(slab) {
-				slab
-			} else {
-				slab_i += 1;
-				let target_capacity = slab.len() * 2;
-				let mut slab = Vec::new();
-				slab.reserve(target_capacity);
-				values.push(slab);
-				values.last_mut()
-			};
-			slab.push(UnsafeCell::new(MaybeUninit::uninit()));
-			let value = value_factory(&key, unsafe {
-				&mut *slab.last().expect("unreachable").get()
-			})
-			.tap_err(|_| drop(slab.pop()))?;
-			let i = slab.len() - 1;
-			slot_map.insert(key, (slab_i, i));
+			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
+			addresses.insert(key, value as *mut _);
 			Ok(value)
 		}
 		.map(|value| unsafe { &*(value as *const _) })
@@ -431,41 +353,24 @@ impl<K: Ord, V> UnpinnedPineMapEmplace<K, V, V> for PineMap<K, V> {
 		value_factory: F,
 	) -> Result<Result<&mut V, (K, F)>, E> {
 		let Cambium {
-			slot_map,
-			values,
+			addresses,
+			memory,
 			holes,
-		} = self.contents.get_mut(/* poisoned */);
+		} = self.contents.get_mut();
 		#[allow(clippy::map_entry)]
-		if slot_map.contains_key(&key) {
+		if addresses.contains_key(&key) {
 			Err((key, value_factory))
 		} else if let Some(hole) = holes.pop() {
-			let slot =
-				unsafe { values.get_unchecked_mut(hole.0).get_unchecked_mut(hole.1) }.get_mut();
-			let value = value_factory(&key, slot)?;
-			slot_map.insert(key, hole);
+			let slot = unsafe { &mut *hole };
+			let value = value_factory(&key, slot).tap_err(|_| holes.push(hole))?;
+			addresses.insert(key, value as *mut _);
 			Ok(value)
 		} else {
-			let mut slab_i = values.len() - 1;
-			let slab = values.last_mut();
-			let slab = if slab.len() < Vec::capacity(slab) {
-				slab
-			} else {
-				slab_i += 1;
-				let target_capacity = slab.len() * 2;
-				let mut slab = Vec::new();
-				slab.reserve(target_capacity);
-				values.push(slab);
-				values.last_mut()
-			};
-			slab.push(UnsafeCell::new(MaybeUninit::uninit()));
-			let value = value_factory(&key, unsafe {
-				&mut *slab.last().expect("unreachable").get()
-			})
-			.tap_err(|_| drop(slab.pop()))?;
-			let i = slab.len() - 1;
-			slot_map.insert(key, (slab_i, i));
+			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
+			addresses.insert(key, value as *mut _);
 			Ok(value)
 		}
+		.map(|value| unsafe { &mut *(value as *mut _) })
 		.pipe(Ok)
 	}
 }
@@ -481,10 +386,12 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 	) -> Result<Result<&V, (K, F)>, E> {
 		let mut contents = self.contents.write(/* poisoned */);
 		let PressedCambium { addresses, values } = &mut *contents;
+		#[allow(clippy::map_entry)]
 		if addresses.contains_key(&key) {
 			Err((key, value_factory))
 		} else {
 			let value = value_factory(&key, values.alloc(MaybeUninit::uninit()))?;
+			addresses.insert(key, value as *mut _);
 			Ok(unsafe { &*(value as *const _) })
 		}
 		.pipe(Ok)
@@ -499,10 +406,12 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 		value_factory: F,
 	) -> Result<Result<&mut V, (K, F)>, E> {
 		let PressedCambium { addresses, values } = self.contents.get_mut(/* poisoned */);
+		#[allow(clippy::map_entry)]
 		if addresses.contains_key(&key) {
 			Err((key, value_factory))
 		} else {
 			let value = value_factory(&key, values.alloc(MaybeUninit::uninit()))?;
+			addresses.insert(key, value as *mut _);
 			Ok(unsafe { &mut *(value as *mut _) })
 		}
 		.pipe(Ok)
@@ -554,16 +463,25 @@ impl<K: Ord, V> Drop for PineMap<K, V> {
 		}
 
 		let contents = self.contents.get_mut(/* poisoned */);
-		for (_, (slab, i)) in mem::take(&mut contents.slot_map) {
-			unsafe {
-				contents
-					.values
-					.get_unchecked_mut(slab)
-					.get_unchecked(i)
-					.get()
-					.pipe(|value| (*value).as_mut_ptr().drop_in_place())
+
+		// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
+		let mut values = mem::take(&mut contents.addresses)
+			.into_iter()
+			.map(|(_, value)| value);
+		catch_unwind({
+			let values = AssertUnwindSafe(values.by_ref());
+			|| {
+				for value in values.0 {
+					unsafe { value.drop_in_place() }
+				}
 			}
-		}
+		})
+		.unwrap_or_else(|panic| {
+			for value in values {
+				catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })).ok();
+			}
+			panic::resume_unwind(panic)
+		})
 	}
 }
 
