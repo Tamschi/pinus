@@ -144,6 +144,9 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
 	}
 
+	/// # Panics
+	///
+	/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
 	fn clear(&mut self) {
 		let contents = self.contents.get_mut(/* poisoned */);
 
@@ -233,6 +236,9 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
 	}
 
+	/// # Panics
+	///
+	/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
 	fn clear(&mut self) {
 		let contents = self.contents.get_mut(/* poisoned */);
 
@@ -437,6 +443,9 @@ where
 impl<K: Ord, V> Unpin for PineMap<K, V> where V: Unpin {}
 impl<K: Ord, V: ?Sized> Unpin for PressedPineMap<K, V> where V: Unpin {}
 
+/// # Panics
+///
+/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
 impl<K: Ord, V> Drop for PineMap<K, V> {
 	fn drop(&mut self) {
 		// None of the data will be used in the future,
@@ -452,6 +461,9 @@ impl<K: Ord, V> Drop for PineMap<K, V> {
 	}
 }
 
+/// # Panics
+///
+/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
 impl<K: Ord, V: ?Sized> Drop for PressedPineMap<K, V> {
 	fn drop(&mut self) {
 		// None of the data will be used in the future,
@@ -475,9 +487,11 @@ fn drop_all_pinned<K, V: ?Sized>(addresses: BTreeMap<K, *mut V>) {
 		}
 	})
 	.unwrap_or_else(|panic| {
+		let mut panics = vec![panic];
 		for value in values {
-			catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })).ok();
+			catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() }))
+				.unwrap_or_else(|panic| panics.push(panic));
 		}
-		panic::resume_unwind(panic)
+		panic::resume_unwind(Box::new(panics))
 	})
 }
