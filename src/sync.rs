@@ -11,6 +11,7 @@ use std::{
 	marker::PhantomPinned,
 	mem::{self, MaybeUninit},
 	panic::{self, catch_unwind, AssertUnwindSafe},
+	pin::Pin,
 };
 use tap::{Pipe, TapFallible};
 
@@ -413,11 +414,15 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 	}
 }
 
-unsafe impl<K: Ord, V> PinnedPineMap<K, V> for PineMap<K, V> {}
-unsafe impl<K: Ord, V: ?Sized> PinnedPineMap<K, V> for PressedPineMap<K, V> {}
+unsafe impl<K: Ord, V> PinnedPineMap<K, V> for Pin<PineMap<K, V>> {
+	type Unpinned = PineMap<K, V>;
+}
+unsafe impl<K: Ord, V: ?Sized> PinnedPineMap<K, V> for Pin<PressedPineMap<K, V>> {
+	type Unpinned = PressedPineMap<K, V>;
+}
 
-unsafe impl<K: Ord, V> PinnedPineMapEmplace<K, V, V> for PineMap<K, V> {}
-unsafe impl<K: Ord, V: ?Sized, W> PinnedPineMapEmplace<K, V, W> for PressedPineMap<K, V> {}
+unsafe impl<K: Ord, V> PinnedPineMapEmplace<K, V, V> for Pin<PineMap<K, V>> {}
+unsafe impl<K: Ord, V: ?Sized, W> PinnedPineMapEmplace<K, V, W> for Pin<PressedPineMap<K, V>> {}
 
 unsafe impl<K: Ord, V> Send for PineMap<K, V>
 where
@@ -481,41 +486,17 @@ impl<K: Ord, V: ?Sized> Drop for PressedPineMap<K, V> {
 }
 
 fn drop_all_pinned<K, V: ?Sized>(addresses: BTreeMap<K, *mut V>) {
-	use std::any::Any;
-
-	/// This MUST be a distinct type.
-	struct DoublePanics(Box<dyn Any + Send>, Box<dyn Any + Send>);
+	let mut panics = vec![];
 
 	// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
-	let mut values = addresses.into_iter();
-	catch_unwind({
-		let values = AssertUnwindSafe(values.by_ref());
-		|| {
-			for (key, value) in values.0 {
-				match catch_unwind(AssertUnwindSafe(|| drop(key))) {
-					Ok(()) => unsafe { value.drop_in_place() },
-					Err(key_panic) => {
-						match catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() })) {
-							Ok(()) => panic::resume_unwind(key_panic),
-							Err(value_panic) => {
-								panic::resume_unwind(Box::new(DoublePanics(key_panic, value_panic)))
-							}
-						}
-					}
-				}
-			}
-		}
-	})
-	.unwrap_or_else(|panic| {
-		let mut panics = match panic.downcast::<DoublePanics>() {
-			Ok(boxed_double) => vec![boxed_double.0, boxed_double.1],
-			Err(plain) => vec![plain],
-		};
-		for (key, value) in values {
-			catch_unwind(AssertUnwindSafe(|| drop(key))).unwrap_or_else(|panic| panics.push(panic));
-			catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() }))
-				.unwrap_or_else(|panic| panics.push(panic));
-		}
-		panic::resume_unwind(Box::new(panics))
-	})
+	for (key, value) in addresses {
+		catch_unwind(AssertUnwindSafe(|| drop(key))).unwrap_or_else(|panic| panics.push(panic));
+		catch_unwind(AssertUnwindSafe(|| unsafe { value.drop_in_place() }))
+			.unwrap_or_else(|panic| panics.push(panic));
+	}
+	match panics.len() {
+		0 => (),
+		1 => panic::resume_unwind(panics.into_iter().next().expect("unreachable")),
+		_ => panic::resume_unwind(Box::new(panics)),
+	}
 }
