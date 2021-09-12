@@ -11,6 +11,7 @@ use std::{
 	marker::PhantomPinned,
 	mem::{self, MaybeUninit},
 	num::NonZeroUsize,
+	panic::{self, catch_unwind, AssertUnwindSafe},
 };
 use tap::{Pipe, TapFallible};
 use vec1::Vec1;
@@ -166,16 +167,42 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 
 		// WAITING ON: <https://github.com/rust-lang/rust/issues/70530> (`BTreeMap::drain_filter`)
 		if mem::needs_drop::<V>() {
-			for (_, (slab, i)) in mem::take(&mut contents.slot_map) {
-				unsafe {
-					contents
-						.values
-						.get_unchecked_mut(slab)
-						.get_unchecked(i)
-						.get()
-						.pipe(|value| (*value).as_mut_ptr().drop_in_place())
+			let mut occupied_slots = mem::take(&mut contents.slot_map)
+				.into_iter()
+				.map(|(_, slot)| slot);
+			catch_unwind({
+				let safe_occupied_slots = AssertUnwindSafe(occupied_slots.by_ref());
+				let safe_contents = contents.pipe_borrow_mut(AssertUnwindSafe);
+				move || {
+					for (slab, i) in safe_occupied_slots.0 {
+						unsafe {
+							safe_contents
+								.0
+								.values
+								.get_unchecked_mut(slab)
+								.get_unchecked(i)
+								.get()
+								.pipe(|value| (*value).as_mut_ptr().drop_in_place())
+						}
+					}
 				}
-			}
+			})
+			.unwrap_or_else(|panic| {
+				for (slab, i) in occupied_slots {
+					let safe_contents = contents.pipe_borrow_mut(AssertUnwindSafe);
+					catch_unwind(move || unsafe {
+						safe_contents
+							.0
+							.values
+							.get_unchecked_mut(slab)
+							.get_unchecked(i)
+							.get()
+							.pipe(|value| (*value).as_mut_ptr().drop_in_place())
+					})
+					.ok();
+				}
+				panic::resume_unwind(panic)
+			})
 		} else {
 			contents.slot_map.clear()
 		}
