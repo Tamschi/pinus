@@ -138,9 +138,17 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
 	}
 
+	/// Drops all keys and all values in this collection, even if some of them panic while being done so.
+	///
+	/// The drop order is unspecified and may change at any point (even between compilations or runs).
+	///
 	/// # Panics
 	///
-	/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
+	/// Iff more than one panic happens,
+	/// they are resumed collected inside a [`Vec<Box<dyn Any + Send>>`],
+	/// unless that vector (re)allocation itself fails, in which case that's not caught at all.
+	///
+	/// > That's probably not the ideal way to handle this. I'm taking suggestions.
 	fn clear(&mut self) {
 		let contents = self.contents.get_mut(/* poisoned */);
 
@@ -235,9 +243,17 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
 	}
 
+	/// Drops all keys and all values in this collection, even if some of them panic while being done so.
+	///
+	/// The drop order is unspecified and may change at any point (even between compilations or runs).
+	///
 	/// # Panics
 	///
-	/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
+	/// Iff more than one panic happens,
+	/// they are resumed collected inside a [`Vec<Box<dyn Any + Send>>`],
+	/// unless that vector (re)allocation itself fails, in which case that's not caught at all.
+	///
+	/// > That's probably not the ideal way to handle this. I'm taking suggestions.
 	fn clear(&mut self) {
 		let contents = self.contents.get_mut(/* poisoned */);
 
@@ -443,9 +459,17 @@ where
 {
 }
 
+/// Drops all keys and all values in this collection, even if some of them panic while being done so.
+///
+/// The drop order is unspecified and may change at any point (even between compilations or runs).
+///
 /// # Panics
 ///
-/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
+/// Iff more than one panic happens,
+/// they are resumed collected inside a [`Vec<Box<dyn Any + Send>>`],
+/// unless that vector (re)allocation itself fails, in which case that's not caught at all.
+///
+/// > That's probably not the ideal way to handle this. I'm taking suggestions.
 impl<K: Ord, V> Drop for PineMap<K, V> {
 	fn drop(&mut self) {
 		// None of the data will be used in the future,
@@ -461,9 +485,17 @@ impl<K: Ord, V> Drop for PineMap<K, V> {
 	}
 }
 
+/// Drops all keys and all values in this collection, even if some of them panic while being done so.
+///
+/// The drop order is unspecified and may change at any point (even between compilations or runs).
+///
 /// # Panics
 ///
-/// Panics are compounded inside a [`Vec<Box<dyn Any + Send>>`].
+/// Iff more than one panic happens,
+/// they are resumed collected inside a [`Vec<Box<dyn Any + Send>>`],
+/// unless that vector (re)allocation itself fails, in which case that's not caught at all.
+///
+/// > That's probably not the ideal way to handle this. I'm taking suggestions.
 impl<K: Ord, V: ?Sized> Drop for PressedPineMap<K, V> {
 	fn drop(&mut self) {
 		// None of the data will be used in the future,
