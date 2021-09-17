@@ -71,7 +71,7 @@ impl<K: Ord, V> PineMap<K, V> {
 		Self {
 			contents: RwLock::new(Cambium {
 				addresses: BTreeMap::new(),
-				memory: Bump::with_capacity(capacity),
+				memory: Bump::with_capacity(mem::size_of::<V>() * capacity),
 				holes: Vec::new(),
 			}),
 		}
