@@ -28,7 +28,7 @@
 //! This should only affect value factories and [`Drop`] implementations of keys and values.
 //!
 //! ## Thread **un**safe versions of the collections don't exist yet
-//! 
+//!
 //! Same as before, this will be much nicer to add once GATs land.
 
 #![doc(html_root_url = "https://docs.rs/pinus/0.0.1")]
