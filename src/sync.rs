@@ -14,7 +14,7 @@ use std::{
 };
 use tap::{Pipe, TapFallible};
 
-/// A [`BTreeMap`] that allows pin-projection to its values and additions through shared references.
+/// A homogeneous [`BTreeMap`] that allows pin-projection to its values and additions through shared references, reusing memory.
 ///
 /// See also [`PressedPineMap`] to store trait objects efficiently.
 ///
@@ -23,9 +23,9 @@ pub struct PineMap<K: Ord, V> {
 	contents: RwLock<Cambium<K, V>>,
 }
 
-/// A [`BTreeMap`] that allows pin-projection to its values and additions through shared references.
+/// A heterogeneous [`BTreeMap`] that allows pin-projection to its values and additions through shared references, rarely reusing memory.
 ///
-/// Unlike [`PineMap`], this one can store heterogeneous trait objects fairly efficiently.
+/// Unlike [`PineMap`], this one can store trait objects fairly efficiently.
 /// As a tradeoff, memory used to store values is not reused until the collection is dropped or cleared.
 ///
 /// See [`UnpinnedPineMap`], [`UnpinnedPineMapEmplace`], [`PinnedPineMap`] and [`PinnedPineMapEmplace`] for the full API.
@@ -317,6 +317,13 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 	}
 }
 
+/// > An implementation detail, but perhaps interesting:
+/// >
+/// > The site that becomes managed by this instance (until [`.clear`](`UnpinnedPineMap::clear`) is called)
+/// > is the `&'a mut V` returned from a given `value_factory` and not (necessarily) the initial [`&'a mut MaybeUninit<V>`](`MaybeUninit`).
+/// >
+/// > The latter is effectively leaked until the collection is cleared or dropped
+/// > (but please don't rely on this, I don't guarantee this will stay the case in any way).
 impl<K: Ord, V> UnpinnedPineMapEmplace<K, V, V> for PineMap<K, V> {
 	fn try_emplace_with<
 		F: for<'a> FnOnce(&K, &'a mut MaybeUninit<V>) -> Result<&'a mut V, E>,

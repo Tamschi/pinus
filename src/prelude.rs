@@ -12,11 +12,41 @@ use tap::Pipe;
 /// Defines the API for trees that haven't been pinned (yet).
 pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	/// Pins this tree.
+	///
+	/// # Safety Notes
+	///
+	/// Well. Technically this is fully safe on stable Rust `1.55.0`.
+	///
+	/// However, this is *slightly* misusing the standard [`Pin`] type here,
+	/// and the `#[repr(transparent)]` on there might not be entirely stabilised.
+	///
+	/// > For now this is behind the `"unstable"` feature.
+	/// >
+	/// > I'll talk to more people and try to stabilise it.
+	///
+	/// ```rust
+	/// use pinus::sync::{PineMap, PressedPineMap};
+	/// use static_assertions::{assert_eq_align, assert_eq_size};
+	/// use std::pin::Pin;
+	///
+	/// assert_eq_align!(PineMap<(), ()>, Pin<PineMap<(), ()>>);
+	/// assert_eq_size!(PineMap<(), ()>, Pin<PineMap<(), ()>>);
+	///
+	/// assert_eq_align!(PressedPineMap<(), ()>, Pin<PressedPineMap<(), ()>>);
+	/// assert_eq_size!(PressedPineMap<(), ()>, Pin<PressedPineMap<(), ()>>);
+	/// ```
+	#[cfg(feature = "unstable")]
 	fn pin(self) -> Pin<Self>
 	where
 		Self: Sized,
 	{
 		unsafe {
+			//SAFETY:
+			//
+			// Well. This is *slightly* misusing the `Pin` type.
+			// It's marked `#repr[transparent]` in the standard library docs, but whether that's really truly stable…
+			//
+			// I'll try to break `tests/layout.rs` if it's ever not the case.
 			(ManuallyDrop::new(self).borrow_mut() as *mut ManuallyDrop<Self>)
 				.cast::<Pin<Self>>()
 				.read()
@@ -539,11 +569,12 @@ where
 	///
 	/// # Safety
 	///
-	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	#[allow(clippy::doc_markdown)] // No backticks needed in `<code>`.
+	/// Note that the <code>[Pin]<&'a mut [MaybeUninit]<W>></code> doesn't imply a drop guarantee for `W`,
 	/// but only that that entire allocation will remain untouched for `'a`.
 	///
-	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
-	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	/// Any resulting [`Pin<&'a V>`](`Pin`) or [`Pin<&'a mut V>`](`Pin`) will have
+	/// its [`Deref::Target`](`std::ops::Deref::Target`) dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
@@ -575,11 +606,12 @@ where
 	///
 	/// # Safety
 	///
-	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	#[allow(clippy::doc_markdown)] // No backticks needed in `<code>`.
+	/// Note that the <code>[Pin]<&'a mut [MaybeUninit]<W>></code> doesn't imply a drop guarantee for `W`,
 	/// but only that that entire allocation will remain untouched for `'a`.
 	///
-	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
-	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	/// Any resulting [`Pin<&'a V>`](`Pin`) or [`Pin<&'a mut V>`](`Pin`) will have
+	/// its [`Deref::Target`](`std::ops::Deref::Target`) dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
@@ -608,8 +640,8 @@ where
 	/// Note that there is no drop guarantee for `W`
 	/// (and that type will in fact not have its [`Drop::drop`] called directly)!
 	///
-	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
-	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	/// Any resulting [`Pin<&'a V>`](`Pin`) or [`Pin<&'a mut V>`](`Pin`) will have
+	/// its [`Deref::Target`](`std::ops::Deref::Target`) dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
@@ -628,11 +660,12 @@ where
 	///
 	/// # Safety
 	///
-	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	#[allow(clippy::doc_markdown)] // No backticks needed in `<code>`.
+	/// Note that the <code>[Pin]<&'a mut [MaybeUninit]<W>></code> doesn't imply a drop guarantee for `W`,
 	/// but only that that entire allocation will remain untouched for `'a`.
 	///
-	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
-	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	/// Any resulting [`Pin<&'a V>`](`Pin`) or [`Pin<&'a mut V>`](`Pin`) will have
+	/// its [`Deref::Target`](`std::ops::Deref::Target`) dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
@@ -668,11 +701,12 @@ where
 	///
 	/// # Safety
 	///
-	/// Note that the [`Pin<&'a mut MaybeUninit<W>>`] doesn't imply a drop guarantee for `W`,
+	#[allow(clippy::doc_markdown)] // No backticks needed in `<code>`.
+	/// Note that the <code>[Pin]<&'a mut [MaybeUninit]<W>></code> doesn't imply a drop guarantee for `W`,
 	/// but only that that entire allocation will remain untouched for `'a`.
 	///
-	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
-	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	/// Any resulting [`Pin<&'a V>`](`Pin`) or [`Pin<&'a mut V>`](`Pin`) will have
+	/// its [`Deref::Target`](`std::ops::Deref::Target`) dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
@@ -704,8 +738,8 @@ where
 	/// Note that there is no drop guarantee for `W`
 	/// (and that type will in fact not have its [`Drop::drop`] called directly)!
 	///
-	/// Any resulting [`Pin<&'a V>`] or [`Pin<&'a mut V>`] will have
-	/// its [`Deref::Target`] dropped in place (or leaked), however, as implied.
+	/// Any resulting [`Pin<&'a V>`](`Pin`) or [`Pin<&'a mut V>`](`Pin`) will have
+	/// its [`Deref::Target`](`std::ops::Deref::Target`) dropped in place (or leaked), however, as implied.
 	///
 	/// # Errors
 	///
