@@ -19,6 +19,85 @@ use tap::{Pipe, TapFallible};
 /// See also [`PressedPineMap`] to store trait objects efficiently.
 ///
 /// See [`UnpinnedPineMap`], [`UnpinnedPineMapEmplace`], [`PinnedPineMap`] and [`PinnedPineMapEmplace`] for the full API.
+///
+/// # Usage / Example
+///
+/// ```rust
+/// use pinus::{prelude::*, sync::PineMap};
+/// use std::{convert::Infallible, pin::Pin};
+///
+/// // `PineMap` is interior-mutable, so either is useful:
+/// let map = PineMap::new();
+/// let mut mut_map = PineMap::new();
+///
+///
+/// // Get parallel shared references by inserting like this:
+/// let a: &String = map.insert("Hello!", "Hello!".to_string())
+///   .unwrap(/* Your data back if the entry already existed. */);
+/// let b: &String = map.insert_with("Hello again!", |k| k.to_string())
+///   .map_err(|(key, _factory)| key).unwrap();
+/// let c: &String = map.try_insert_with::<_, Infallible>("Hello once again!", |k| Ok(k.to_string()))
+///   .unwrap(/* Error from factory. */)
+///   .map_err(|(key, _factory)| key).unwrap();
+///
+/// let a2: &String = map.get("Hello!").unwrap();
+///
+/// let _ = (a, a2, b, c);
+///
+///
+/// // Get exclusive references like this (also with or without factory):
+/// let mut_a: &mut String = mut_map.insert_with_mut("Hi!", |k| k.to_string())
+///   .map_err(|(key, _factory)| key).unwrap();
+///
+/// let mut_a2: &mut String = mut_map.get_mut("Hi!").unwrap();
+///
+/// // The `…_mut` methods are actually faster, but their results can't be held onto at once:
+/// // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
+///
+///
+/// // Remove entries like this:
+/// mut_map.clear();
+/// let _: Option<(&str, String)> = mut_map.remove_pair("A");
+/// let _: Option<String> = mut_map.remove_value("B");
+/// let _: Option<&str> = mut_map.remove_key("C");
+/// let _: bool = mut_map.drop_entry("D");
+///
+///
+/// /////
+///
+///
+/// // Now on to part 2, pinning:
+/// let mut map: Pin<_> = map.pin();
+/// let mut mut_map: Pin<_> = mut_map.pin();
+///
+///
+/// // Shared references to values are now pinned:
+/// let a: Pin<&String> = map.insert("Hello!!", "Hello!!".to_string())
+///   .unwrap();
+/// let b: Pin<&String> = map.insert_with("Hello again!!", |k| k.to_string())
+///   .ok().unwrap();
+/// let c: Pin<&String> = map.try_insert_with::<_, Infallible>("Hello once again!!", |k| Ok(k.to_string()))
+///   .unwrap().ok().unwrap();
+///
+/// let a2: Pin<&String> = map.get("Hello!").unwrap();
+///
+/// let _ = (a, a2, b, c);
+///
+///
+/// // Exclusive references to values are also pinned:
+/// let mut mut_a: Pin<&mut String> = mut_map.insert_with_mut("Hi!", |k| k.to_string())
+///   .map_err(|(key, _factory)| key).unwrap();
+///
+/// let mut mut_a2: Pin<&mut String> = mut_map.get_mut("Hi!").unwrap();
+///
+/// // The `…_mut` methods are actually faster, but their results can't be held onto at once:
+/// // let _ = (mut_a, mut_a2); // "error[E0499]: cannot borrow `mut_map` as mutable more than once at a time"
+///
+/// // Only keys can be removed now, but values must be dropped in place:
+/// mut_map.clear();
+/// let _: Option<&str> = mut_map.remove_key("C");
+/// let _: bool = mut_map.drop_entry("D");
+/// ```
 pub struct PineMap<K: Ord, V> {
 	contents: RwLock<Cambium<K, V>>,
 }
@@ -29,6 +108,54 @@ pub struct PineMap<K: Ord, V> {
 /// As a tradeoff, memory used to store values is not reused until the collection is dropped or cleared.
 ///
 /// See [`UnpinnedPineMap`], [`UnpinnedPineMapEmplace`], [`PinnedPineMap`] and [`PinnedPineMapEmplace`] for the full API.
+///
+/// # Example
+///
+/// ```rust
+/// use pinus::{prelude::*, sync::PressedPineMap};
+/// use std::{
+///   any::Any,
+///   borrow::{Borrow, BorrowMut},
+///   convert::Infallible,
+///   pin::Pin,
+/// };
+///
+/// let map = PressedPineMap::<_, dyn Any>::new();
+///
+/// // `dyn Any` is `!Sized`,
+/// // so it's necessary to use the loosely-typed emplacement methods:
+/// let _: &dyn Any = map
+///   .emplace_with(1, |_key, slot| slot.write(()))
+///   .ok(/* or key and factory */).unwrap();
+/// let _: &dyn Any = map
+///   .try_emplace_with::<_, Infallible>(2, |_key, slot| Ok(slot.write(())))
+///   .unwrap(/* or factory error */)
+///   .ok(/* or key and factory */).unwrap();
+///
+/// // There's also a by-value method,
+/// // but it has slightly steeper requirements:
+/// #[derive(Debug)]
+/// struct MyAny;
+/// impl std::borrow::Borrow<dyn Any> for MyAny { //…
+/// #   fn borrow(&self) -> &dyn Any { self }
+/// # }
+/// impl std::borrow::BorrowMut<dyn Any> for MyAny { //…
+/// #   fn borrow_mut(&mut self) -> &mut dyn Any { self }
+/// # }
+///
+/// let _: &dyn Any = map
+///   .emplace(3, MyAny)
+///   .unwrap(/* or key and value */);
+///
+/// // As usual the map's values can be pinned:
+/// let map: Pin<PressedPineMap<_, _>> = map.pin();
+///
+/// // And then further value references are pinned:
+/// let _: Pin<&dyn Any> = map.emplace(4, MyAny).unwrap();
+///
+/// // To immediately get an unpinned reference, just use `.as_unpinned()`:
+/// let _: &dyn Any = map.as_unpinned().emplace(5, MyAny).unwrap();
+/// ```
 pub struct PressedPineMap<K: Ord, V: ?Sized> {
 	contents: RwLock<PressedCambium<K, V>>,
 }

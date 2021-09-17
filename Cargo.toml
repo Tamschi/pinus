@@ -29,9 +29,6 @@ is-it-maintained-issue-resolution = { repository = "Tamschi/pinus" }
 is-it-maintained-open-issues = { repository = "Tamschi/pinus" }
 maintenance = { status = "experimental" } # This may differ between branches.
 
-[features]
-unstable = []
-
 [dependencies]
 bumpalo = "3.7.0"
 parking_lot = "0.11.2"

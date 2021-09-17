@@ -11,31 +11,11 @@ use tap::Pipe;
 
 /// Defines the API for trees that haven't been pinned (yet).
 pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
-	/// Pins this tree.
+	/// Pins the values in this tree, though not the instance itself which is still [`Unpin`] after this.
 	///
-	/// # Safety Notes
-	///
-	/// Well. Technically this is fully safe on stable Rust `1.55.0`.
-	///
-	/// However, this is *slightly* misusing the standard [`Pin`] type here,
-	/// and the `#[repr(transparent)]` on there might not be entirely stabilised.
-	///
-	/// > For now this is behind the `"unstable"` feature.
-	/// >
-	/// > I'll talk to more people and try to stabilise it.
-	///
-	/// ```rust
-	/// use pinus::sync::{PineMap, PressedPineMap};
-	/// use static_assertions::{assert_eq_align, assert_eq_size};
-	/// use std::pin::Pin;
-	///
-	/// assert_eq_align!(PineMap<(), ()>, Pin<PineMap<(), ()>>);
-	/// assert_eq_size!(PineMap<(), ()>, Pin<PineMap<(), ()>>);
-	///
-	/// assert_eq_align!(PressedPineMap<(), ()>, Pin<PressedPineMap<(), ()>>);
-	/// assert_eq_size!(PressedPineMap<(), ()>, Pin<PressedPineMap<(), ()>>);
-	/// ```
-	#[cfg(feature = "unstable")]
+	/// This is a somewhat unconventional use of [`Pin`],
+	/// but pinning through a reference wouldn't make much sense here as the collections in this crate themselves are *always* [`Unpin`],
+	/// regardless of the properties of their key or value types.
 	fn pin(self) -> Pin<Self>
 	where
 		Self: Sized,
@@ -43,10 +23,10 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 		unsafe {
 			//SAFETY:
 			//
-			// Well. This is *slightly* misusing the `Pin` type.
-			// It's marked `#repr[transparent]` in the standard library docs, but whether that's really truly stable…
-			//
-			// I'll try to break `tests/layout.rs` if it's ever not the case.
+			// Well. This is clearly misusing the `Pin` type.
+			// It's marked `#repr[transparent]` in the standard library docs, though,
+			// and after digging into it a bit that, does does appear part of the stabilised feature:
+			// <https://github.com/rust-lang/rust/issues/55766>
 			(ManuallyDrop::new(self).borrow_mut() as *mut ManuallyDrop<Self>)
 				.cast::<Pin<Self>>()
 				.read()
@@ -446,11 +426,11 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		unsafe { self.as_unpinned_mut() }.clear()
 	}
 
-	/// Returns a reference to the value corresponding to the key.
+	/// Returns a mutable reference to the pinned value corresponding to the key.
 	///
 	/// The key may be any borrowed form of the map's key type,
 	/// but the ordering on the borrowed form *must* match the ordering on the key type.
-	fn get_mut_pinned<'a, Q>(&'a mut self, key: &Q) -> Option<Pin<&'a mut V>>
+	fn get_mut<'a, Q>(&'a mut self, key: &Q) -> Option<Pin<&'a mut V>>
 	where
 		Self::Unpinned: 'a,
 		K: Borrow<Q>,
