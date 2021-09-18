@@ -9,7 +9,7 @@ use std::{
 };
 use tap::Pipe;
 
-/// Defines the API for trees that haven't been pinned (yet).
+/// The unpinned API.
 pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	/// Pins the values in this tree, though not the instance itself which is still [`Unpin`] after this.
 	///
@@ -195,7 +195,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	}
 }
 
-/// Defines the emplacement API for trees that haven't been pinned (yet).
+/// The unpinned emplacement API.
 pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
 	///
@@ -295,7 +295,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 	}
 }
 
-/// Defines the pin-projecting API.
+/// The pinned API, which disallows moving values in safe Rust.
 ///
 /// # Safety
 ///
@@ -531,7 +531,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 	}
 }
 
-/// Defines the pin-projecting emplacement API.
+/// The pinned emplacement API.
 ///
 /// # Safety
 ///
