@@ -2,9 +2,10 @@
 
 ## Supported Versions
 
-| Version | Supported          | ***Initial*** Reason for Removal |
-| ------- | ------------------ | -------------------------------- |
-| 0.0.1   | :white_check_mark: |                                  |
+| Version | Supported          | ***Initial*** Reason for Removal                                                    |
+| ------- | ------------------ | ----------------------------------------------------------------------------------- |
+| 0.0.2   | :white_check_mark: |                                                                                     |
+| 0.0.1   | :x:                | Panics in consumer code could break this library's drop guarantee in certain cases. |
 
 Faulty versions are [yanked](https://doc.rust-lang.org/cargo/commands/cargo-yank.html), where possible after a Semver-compatible update is made available, and added to the table above as unsupported.  
 They are also marked with an additional `v….….…-yanked` tag in Git to make them easily recognisable, but original release tags are not removed.

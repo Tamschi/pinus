@@ -1,6 +1,9 @@
-use std::error::Error;
-
-use pinus::{prelude::*, sync::PineMap};
+use pinus::{
+	prelude::*,
+	sync::{PineMap, PressedPineMap},
+};
+use static_assertions::assert_impl_all;
+use std::{error::Error, marker::PhantomPinned};
 
 #[test]
 fn new() {
@@ -66,3 +69,6 @@ fn complicated() {
 
 	println!("{:?}", result.unwrap().ok().unwrap());
 }
+
+assert_impl_all!(PineMap<PhantomPinned, PhantomPinned>: Unpin);
+assert_impl_all!(PressedPineMap<PhantomPinned, PhantomPinned>: Unpin);

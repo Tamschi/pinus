@@ -13,6 +13,7 @@
 	"todo-tree.regex.regex": "(($TAGS)|^\\s*- \\[ \\])",
 	"rust-analyzer.cargo.allFeatures": true,
 	"cSpell.words": [
+		"alues",
 		"pinus"
 	]
 }
