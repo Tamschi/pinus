@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/pinus)](https://crates.io/crates/pinus)
 [![Docs.rs](https://docs.rs/pinus/badge.svg)](https://docs.rs/pinus)
 
-![Rust 1.51](https://img.shields.io/static/v1?logo=Rust&label=&message=1.51&color=grey)
+![Rust 1.55](https://img.shields.io/static/v1?logo=Rust&label=&message=1.55&color=grey)
 [![CI](https://github.com/Tamschi/pinus/workflows/CI/badge.svg?branch=unstable)](https://github.com/Tamschi/pinus/actions?query=workflow%3ACI+branch%3Aunstable)
 ![Crates.io - License](https://img.shields.io/crates/l/pinus/0.0.2)
 
