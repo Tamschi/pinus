@@ -1,13 +1,13 @@
 [package]
 name = "pinus"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Tamme Schichler <tamme@schichler.dev>"]
 edition = "2018"
 description = "A prickly BTreeMap. You can insert through shared references and values are pin-projected."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Tamschi/pinus"
-homepage = "https://github.com/Tamschi/pinus/tree/v0.0.1"
-documentation = "https://docs.rs/pinus/0.0.1"
+homepage = "https://github.com/Tamschi/pinus/tree/v0.0.2"
+documentation = "https://docs.rs/pinus/0.0.2"
 keywords = ["pin", "b-tree", "interior-mutability"]
 categories = ["data-structures", "rust-patterns"]
 readme = "README.md"

@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next (0.0.2)
+## 0.0.2
 
-TODO: Date
+2021-09-19
 
 - **Breaking changes**:
   - The required minimum Rust version is now `1.55`

@@ -41,7 +41,7 @@
 //!
 //! Same as above, this will be much nicer to add once GATs land.
 
-#![doc(html_root_url = "https://docs.rs/pinus/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/pinus/0.0.2")]
 #![warn(clippy::pedantic, missing_docs)]
 #![allow(clippy::semicolon_if_nothing_returned)]
 
