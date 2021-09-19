@@ -2,7 +2,14 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## 0.0.2
+## 0.0.3
+
+2021-09-19
+
+- Revisions:
+  - Fixed wrong minimum Rust version in README.
+
+## 0.0.2 (yanked)
 
 2021-09-19
 
@@ -20,7 +27,7 @@
 
     > See also [Issue #5: Please check for pinning and unwind safety issues!](https://github.com/Tamschi/pinus/issues/5).
 
-## 0.0.1
+## 0.0.1 (yanked)
 
 2021-09-10
 
