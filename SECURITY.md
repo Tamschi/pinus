@@ -4,7 +4,8 @@
 
 | Version | Supported          | ***Initial*** Reason for Removal                                                    |
 | ------- | ------------------ | ----------------------------------------------------------------------------------- |
-| 0.0.2   | :white_check_mark: |                                                                                     |
+| 0.0.3   | :white_check_mark: |                                                                                     |
+| 0.0.2   | :x:                | Wrong minimum Rust version in README.                                               |
 | 0.0.1   | :x:                | Panics in consumer code could break this library's drop guarantee in certain cases. |
 
 Faulty versions are [yanked](https://doc.rust-lang.org/cargo/commands/cargo-yank.html), where possible after a Semver-compatible update is made available, and added to the table above as unsupported.  
