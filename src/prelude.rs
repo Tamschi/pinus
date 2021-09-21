@@ -347,10 +347,21 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 
 	/// Access the unpinned mutable API.
 	///
+	/// This is safe as `V` is `Unpin`,
+	/// so the values are guaranteed to be movable.
+	fn as_unpinned_mut(&mut self) -> &mut Self::Unpinned
+	where
+		V: Unpin,
+	{
+		unsafe { self.as_unpinned_mut_unchecked() }
+	}
+
+	/// Access the unpinned mutable API.
+	///
 	/// # Safety
 	///
 	/// Pinning invariants for any remaining values `V` must still be upheld.
-	unsafe fn as_unpinned_mut(&mut self) -> &mut Self::Unpinned {
+	unsafe fn as_unpinned_mut_unchecked(&mut self) -> &mut Self::Unpinned {
 		&mut *(self as *mut Self).cast()
 	}
 
@@ -423,7 +434,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 	///
 	/// Iff the instance was poisoned.
 	fn clear(&mut self) {
-		unsafe { self.as_unpinned_mut() }.clear()
+		unsafe { self.as_unpinned_mut_unchecked() }.clear()
 	}
 
 	/// Returns a mutable reference to the pinned value corresponding to the key.
@@ -437,7 +448,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		Q: Ord + ?Sized,
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.get_mut(key)
 				.map(|value| Pin::new_unchecked(value))
 		}
@@ -459,7 +470,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		V: Sized,
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.try_insert_with_mut(key, value_factory)?
 				.map(|value| Pin::new_unchecked(&mut *(value as *mut _)))
 		}
@@ -480,7 +491,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		V: Sized, // Just for clarity.
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.insert_with_mut(key, value_factory)
 				.map(|value| Pin::new_unchecked(&mut *(value as *mut _)))
 		}
@@ -496,7 +507,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		V: Sized,
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.insert_mut(key, value)
 				.map(|value| Pin::new_unchecked(&mut *(value as *mut _)))
 		}
@@ -510,7 +521,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
 	{
-		unsafe { self.as_unpinned_mut() }.remove_key(key)
+		unsafe { self.as_unpinned_mut_unchecked() }.remove_key(key)
 	}
 
 	/// If a matching key exists, drops the associated key and value. (In unspecified order!)
@@ -527,7 +538,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
 	{
-		unsafe { self.as_unpinned_mut() }.drop_entry(key)
+		unsafe { self.as_unpinned_mut_unchecked() }.drop_entry(key)
 	}
 }
 
@@ -666,7 +677,7 @@ where
 	{
 		let value_factory = Cell::new(Some(value_factory));
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.try_emplace_with_mut(key, |key, slot| {
 					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
 						.map(|value| Pin::into_inner_unchecked(value))
@@ -701,7 +712,7 @@ where
 	{
 		let value_factory = Cell::new(Some(value_factory));
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.emplace_with_mut(key, |key, slot| {
 					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
 						.pipe(|value| Pin::into_inner_unchecked(value))
@@ -731,7 +742,7 @@ where
 	{
 		let value = Cell::new(Some(value));
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.emplace_with_mut(key, |_, slot| {
 					slot.write(value.take().expect("unreachable")).borrow_mut()
 				})

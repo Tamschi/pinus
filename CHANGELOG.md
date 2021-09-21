@@ -2,6 +2,15 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## next
+
+TODO: Date
+
+- **Breaking changes**:
+  - renamed `.as_unpinned_mut` to `.as_unpinned_mut_unchecked`.
+- Features:
+  - `.as_unpinned_mut` is now a safe method available `where V: Unpin`.
+
 ## 0.0.3
 
 2021-09-19
