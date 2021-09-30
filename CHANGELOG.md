@@ -7,9 +7,10 @@
 TODO: Date
 
 - **Breaking changes**:
-  - renamed `.as_unpinned_mut` to `.as_unpinned_mut_unchecked`.
+  - renamed `.as_unpinned_mut()` to `.as_unpinned_mut_unchecked()`.
+    > This is to make room for the safe `.as_unpinned_mut()` below.
 - Features:
-  - `.as_unpinned_mut` is now a safe method available `where V: Unpin`.
+  - `.as_unpinned_mut()` is now a safe method that requires `V: Unpin`.
 
 ## 0.0.3
 

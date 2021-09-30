@@ -356,7 +356,9 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		unsafe { self.as_unpinned_mut_unchecked() }
 	}
 
-	/// Access the unpinned mutable API.
+	/// Access the unpinned mutable API without requiring `V: Unpin`.
+	///
+	/// > If `V: Unpin`, use [`.as_unpinned_mut()`](`PinnedPineMap::as_unpinned_mut`) instead!
 	///
 	/// # Safety
 	///
