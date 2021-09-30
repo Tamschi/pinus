@@ -1,4 +1,5 @@
 //! Thread-safe b-trees.
+#![allow(clippy::type_complexity)] // For not-quite fallible methods.
 
 use crate::prelude::{
 	PinnedPineMap, PinnedPineMapEmplace, UnpinnedPineMap, UnpinnedPineMapEmplace,
@@ -13,6 +14,7 @@ use std::{
 	pin::Pin,
 };
 use tap::{Pipe, TapFallible};
+use this_is_fine::{prelude::*, Fine};
 
 /// A homogeneous [`BTreeMap`] that allows pin-projection to its values and additions through shared references, reusing memory.
 ///
@@ -25,6 +27,7 @@ use tap::{Pipe, TapFallible};
 /// ```rust
 /// use pinus::{prelude::*, sync::PineMap};
 /// use std::{convert::Infallible, pin::Pin};
+/// use this_is_fine::prelude::*;
 ///
 /// // `PineMap` is interior-mutable, so either is useful:
 /// let map = PineMap::new();
@@ -119,6 +122,7 @@ pub struct PineMap<K: Ord, V> {
 ///   convert::Infallible,
 ///   pin::Pin,
 /// };
+/// use this_is_fine::prelude::*;
 ///
 /// let map = PressedPineMap::<_, dyn Any>::new();
 ///
@@ -256,13 +260,14 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&V, (K, F)>, E> {
+	) -> Result<Fine<&V, (K, F)>, E> {
 		let value_factory = Cell::new(Some(value_factory));
 		self.try_emplace_with(key, |key, slot| {
 			slot.write(value_factory.take().expect("unreachable")(key)?)
 				.pipe(Ok)
-		})
-		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
+		})?
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+		.pipe(Ok)
 	}
 
 	/// Drops all keys and all values in this collection, even if some of them panic while being done so.
@@ -311,13 +316,14 @@ impl<K: Ord, V> UnpinnedPineMap<K, V> for PineMap<K, V> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&mut V, (K, F)>, E> {
+	) -> Result<Fine<&mut V, (K, F)>, E> {
 		let value_factory = Cell::new(Some(value_factory));
 		self.try_emplace_with_mut(key, |key, slot| {
 			slot.write(value_factory.take().expect("unreachable")(key)?)
 				.pipe(Ok)
-		})
-		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
+		})?
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+		.pipe(Ok)
 	}
 
 	fn remove_pair<Q>(&mut self, key: &Q) -> Option<(K, V)>
@@ -358,7 +364,7 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&V, (K, F)>, E>
+	) -> Result<Fine<&V, (K, F)>, E>
 	where
 		V: Sized,
 	{
@@ -366,8 +372,9 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 		self.try_emplace_with(key, |key, slot| {
 			slot.write(value_factory.take().expect("unreachable")(key)?)
 				.pipe(Ok)
-		})
-		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
+		})?
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+		.pipe(Ok)
 	}
 
 	/// Drops all keys and all values in this collection, even if some of them panic while being done so.
@@ -409,7 +416,7 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&mut V, (K, F)>, E>
+	) -> Result<Fine<&mut V, (K, F)>, E>
 	where
 		V: Sized,
 	{
@@ -417,8 +424,9 @@ impl<K: Ord, V: ?Sized> UnpinnedPineMap<K, V> for PressedPineMap<K, V> {
 		self.try_emplace_with_mut(key, |key, slot| {
 			slot.write(value_factory.take().expect("unreachable")(key)?)
 				.pipe(Ok)
-		})
-		.map(|inner| inner.map_err(|(key, _)| (key, value_factory.take().expect("unreachable"))))
+		})?
+		.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
+		.pipe(Ok)
 	}
 
 	fn remove_pair<Q>(&mut self, key: &Q) -> Option<(K, V)>
@@ -459,7 +467,7 @@ impl<K: Ord, V> UnpinnedPineMapEmplace<K, V, V> for PineMap<K, V> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&V, (K, F)>, E> {
+	) -> Result<Fine<&V, (K, F)>, E> {
 		let mut contents = self.contents.write(/* poisoned */);
 		let Cambium {
 			addresses,
@@ -467,17 +475,17 @@ impl<K: Ord, V> UnpinnedPineMapEmplace<K, V, V> for PineMap<K, V> {
 			holes,
 		} = &mut *contents;
 		#[allow(clippy::map_entry)]
-		if addresses.contains_key(&key) {
-			Err((key, value_factory))
+		if let Some(existing_value) = addresses.get(&key) {
+			(unsafe { &**existing_value }, Err((key, value_factory)))
 		} else if let Some(hole) = holes.pop() {
 			let slot = unsafe { &mut *hole };
 			let value = value_factory(&key, slot).tap_err(|_| holes.push(hole))?;
 			addresses.insert(key, value as *mut _);
-			Ok(value)
+			(&*value, Ok(()))
 		} else {
 			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
 			addresses.insert(key, value as *mut _);
-			Ok(value)
+			(&*value, Ok(()))
 		}
 		.map(|value| unsafe { &*(value as *const _) })
 		.pipe(Ok)
@@ -490,24 +498,24 @@ impl<K: Ord, V> UnpinnedPineMapEmplace<K, V, V> for PineMap<K, V> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&mut V, (K, F)>, E> {
+	) -> Result<Fine<&mut V, (K, F)>, E> {
 		let Cambium {
 			addresses,
 			memory,
 			holes,
 		} = self.contents.get_mut();
 		#[allow(clippy::map_entry)]
-		if addresses.contains_key(&key) {
-			Err((key, value_factory))
+		if let Some(existing_value) = addresses.get(&key) {
+			(unsafe { &mut **existing_value }, Err((key, value_factory)))
 		} else if let Some(hole) = holes.pop() {
 			let slot = unsafe { &mut *hole };
 			let value = value_factory(&key, slot).tap_err(|_| holes.push(hole))?;
 			addresses.insert(key, value as *mut _);
-			Ok(value)
+			(value, Ok(()))
 		} else {
 			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
 			addresses.insert(key, value as *mut _);
-			Ok(value)
+			(value, Ok(()))
 		}
 		.map(|value| unsafe { &mut *(value as *mut _) })
 		.pipe(Ok)
@@ -522,16 +530,16 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&V, (K, F)>, E> {
+	) -> Result<Fine<&V, (K, F)>, E> {
 		let mut contents = self.contents.write(/* poisoned */);
 		let PressedCambium { addresses, memory } = &mut *contents;
 		#[allow(clippy::map_entry)]
-		if addresses.contains_key(&key) {
-			Err((key, value_factory))
+		if let Some(existing_value) = addresses.get(&key) {
+			(unsafe { &**existing_value }, Err((key, value_factory)))
 		} else {
 			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
 			addresses.insert(key, value as *mut _);
-			Ok(unsafe { &*(value as *const _) })
+			(unsafe { &*(value as *const _) }, Ok(()))
 		}
 		.pipe(Ok)
 	}
@@ -543,15 +551,15 @@ impl<K: Ord, V: ?Sized, W> UnpinnedPineMapEmplace<K, V, W> for PressedPineMap<K,
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&mut V, (K, F)>, E> {
+	) -> Result<Fine<&mut V, (K, F)>, E> {
 		let PressedCambium { addresses, memory } = self.contents.get_mut(/* poisoned */);
 		#[allow(clippy::map_entry)]
-		if addresses.contains_key(&key) {
-			Err((key, value_factory))
+		if let Some(existing_value) = addresses.get(&key) {
+			(unsafe { &mut **existing_value }, Err((key, value_factory)))
 		} else {
 			let value = value_factory(&key, memory.alloc(MaybeUninit::uninit()))?;
 			addresses.insert(key, value as *mut _);
-			Ok(unsafe { &mut *(value as *mut _) })
+			(unsafe { &mut *(value as *mut _) }, Ok(()))
 		}
 		.pipe(Ok)
 	}

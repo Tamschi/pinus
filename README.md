@@ -21,6 +21,13 @@ A prickly BTreeMap.
 - You can remove keys and drop entries through exclusive references.
 - You can remove values through exclusive references until the `PineMap` is pinned.
 
+[This][this-is-fine] container API [is fine][this-is-fine] ☕🐕,
+but it's still fully usable without directly referencing that crate.
+
+[this-is-fine]: https://crates.io/crates/this-is-fine
+
+This crate goes together well with [fruit-salad](https://crates.io/crates/fruit-salad) 🥗
+
 <!-- markdownlint-disable heading-increment no-trailing-punctuation -->
 
 ### Help wanted!
@@ -49,6 +56,7 @@ cargo add pinus
 ```rust
 use pinus::{prelude::*, sync::PineMap};
 use std::{convert::Infallible, pin::Pin};
+use this_is_fine::prelude::*;
 
 // `PineMap` is interior-mutable, so either is useful:
 let map = PineMap::new();

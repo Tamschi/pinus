@@ -33,6 +33,7 @@ maintenance = { status = "experimental" } # This may differ between branches.
 bumpalo = "3.7.1"
 parking_lot = "0.11.2"
 tap = "1.0.1"
+this-is-fine = "0.0.1"
 
 [dev-dependencies]
 cargo-husky = "1.5.0"

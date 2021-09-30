@@ -4,6 +4,7 @@ use pinus::{
 };
 use static_assertions::assert_impl_all;
 use std::{error::Error, marker::PhantomPinned};
+use this_is_fine::prelude::*;
 
 #[test]
 fn new() {

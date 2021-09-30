@@ -47,10 +47,11 @@
 
 use std::convert::Infallible;
 
-#[cfg(all(doctest))]
-pub mod readme {
-	doc_comment::doctest!("../README.md");
-}
+//TODO
+// #[cfg(all(doctest))]
+// pub mod readme {
+// 	doc_comment::doctest!("../README.md");
+// }
 
 pub mod prelude;
 pub mod sync;
