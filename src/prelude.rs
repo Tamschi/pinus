@@ -560,6 +560,9 @@ where
 {
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
 	///
+	/// > In many cases, you'll want to call `.as_unpinned().try_emplace_with(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
+	///
 	/// # Safety
 	///
 	#[allow(clippy::doc_markdown)] // No backticks needed in `<code>`.
@@ -596,6 +599,9 @@ where
 	}
 
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// > In many cases, you'll want to call `.as_unpinned().emplace_with(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
 	///
@@ -649,7 +655,11 @@ where
 				.map(|value| Pin::new_unchecked(&*(value as *const _)))
 		}
 	}
+
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// > In many cases, you'll want to call `.try_emplace_with_mut_unpinned(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
 	///
@@ -690,7 +700,35 @@ where
 		}
 	}
 
+	/// Tries to emplace a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with_mut_unpinned<
+		'a,
+		F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> Result<&'b mut V, E>,
+		E,
+	>(
+		&'a mut self,
+		key: K,
+		value_factory: F,
+	) -> Result<Result<Pin<&'a mut V>, (K, F)>, E>
+	where
+		Self::Unpinned: 'a,
+	{
+		unsafe { self.as_unpinned_mut_unchecked() }
+			.try_emplace_with_mut(key, value_factory)
+			.map(|inner_result| inner_result.map(|v| unsafe { Pin::new_unchecked(v) }))
+	}
+
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// > In many cases, you'll want to call `.emplace_with_mut_unpinned(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
 	///
@@ -722,6 +760,25 @@ where
 				.map(|value| Pin::new_unchecked(value))
 				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 		}
+	}
+
+	/// Emplaces a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with_mut_unpinned<'a, F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> &'b mut V>(
+		&'a mut self,
+		key: K,
+		value_factory: F,
+	) -> Result<Pin<&'a mut V>, (K, F)>
+	where
+		Self::Unpinned: 'a,
+	{
+		unsafe { self.as_unpinned_mut_unchecked() }
+			.emplace_with_mut(key, value_factory)
+			.map(|v| unsafe { Pin::new_unchecked(v) })
 	}
 
 	/// Emplaces a new value, but only if no such key exists yet.

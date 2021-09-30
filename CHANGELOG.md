@@ -11,6 +11,18 @@ TODO: Date
     > This is to make room for the safe `.as_unpinned_mut()` below.
 - Features:
   - `.as_unpinned_mut()` is now a safe method that requires `V: Unpin`.
+  - added `.try_emplace_with_mut_unpinned(…)` and `.emplace_with_mut_unpinned(…)` methods.
+    > These are safe wrappers around
+    >
+    > ```rust
+    > unsafe { self.as_unpinned_mut_unchecked() }
+    >   .try_emplace_with_mut(key, value_factory)
+    >   .map(|inner_result| inner_result.map(|v| unsafe { Pin::new_unchecked(v) }))
+    > ```
+    >
+    > which cannot move existing values around.
+- Revisions:
+  - Documentation improvements.
 
 ## 0.0.3
 
