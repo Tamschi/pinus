@@ -562,7 +562,7 @@ where
 {
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
 	///
-	/// > In many cases, you'll want to call `.as_unpinned().try_emplace_with(…)` instead,
+	/// > In many cases, you'll want to call `.try_emplace_with_unpinned(…)` instead,
 	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
@@ -600,12 +600,38 @@ where
 		}
 	}
 
-	//TODO: The `_unpinned` variants also make sense for `emplace_with` methods without `mut`,
-	// as they'd still immediately return a pinned reference!
+	/// Tries to emplace a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// > In many cases, you'll want to call `.as_unpinned().try_emplace_with(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with_unpinned<
+		'a,
+		F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> Result<&'b mut V, E>,
+		E,
+	>(
+		&'a self,
+		key: K,
+		value_factory: F,
+	) -> Result<Fine<Pin<&'a V>, (K, F)>, E>
+	where
+		Self::Unpinned: 'a,
+	{
+		self.as_unpinned()
+			.try_emplace_with(key, value_factory)?
+			.map(|v| unsafe { Pin::new_unchecked(v) })
+			.pipe(Ok)
+	}
 
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
 	///
-	/// > In many cases, you'll want to call `.as_unpinned().emplace_with(…)` instead,
+	/// > In many cases, you'll want to call `.emplace_with_unpinned(…)` instead,
 	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
@@ -635,6 +661,25 @@ where
 				.map(|value| Pin::new_unchecked(&*(value as *const _)))
 				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 		}
+	}
+
+	/// Emplaces a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with_unpinned<'a, F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> &'b mut V>(
+		&'a self,
+		key: K,
+		value_factory: F,
+	) -> Fine<Pin<&'a V>, (K, F)>
+	where
+		Self::Unpinned: 'a,
+	{
+		self.as_unpinned()
+			.emplace_with(key, value_factory)
+			.map(|v| unsafe { Pin::new_unchecked(v) })
 	}
 
 	/// Emplaces a new value, but only if no such key exists yet.
