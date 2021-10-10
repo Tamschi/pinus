@@ -4,7 +4,7 @@
 
 | Version | Supported          | ***Initial*** Reason for Removal                                                    |
 | ------- | ------------------ | ----------------------------------------------------------------------------------- |
-| 0.0.3   | :white_check_mark: |                                                                                     |
+| 0.0.3-4 | :white_check_mark: |                                                                                     |
 | 0.0.2   | :x:                | Wrong minimum Rust version in README.                                               |
 | 0.0.1   | :x:                | Panics in consumer code could break this library's drop guarantee in certain cases. |
 

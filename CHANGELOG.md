@@ -2,9 +2,9 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
-## next
+## 0.0.4
 
-TODO: Date
+2021-10-10
 
 - **Breaking changes**:
   - renamed `.as_unpinned_mut()` to `.as_unpinned_mut_unchecked()`.
