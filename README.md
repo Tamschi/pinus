@@ -141,6 +141,7 @@ use std::{
   convert::Infallible,
   pin::Pin,
 };
+use this_is_fine::prelude::*;
 
 let map = PressedPineMap::<_, dyn Any>::new();
 
