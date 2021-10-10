@@ -6,7 +6,7 @@
 
 ![Rust 1.55](https://img.shields.io/static/v1?logo=Rust&label=&message=1.55&color=grey)
 [![CI](https://github.com/Tamschi/pinus/workflows/CI/badge.svg?branch=unstable)](https://github.com/Tamschi/pinus/actions?query=workflow%3ACI+branch%3Aunstable)
-![Crates.io - License](https://img.shields.io/crates/l/pinus/0.0.3)
+![Crates.io - License](https://img.shields.io/crates/l/pinus/0.0.4)
 
 [![GitHub](https://img.shields.io/static/v1?logo=GitHub&label=&message=%20&color=grey)](https://github.com/Tamschi/pinus)
 [![open issues](https://img.shields.io/github/issues-raw/Tamschi/pinus)](https://github.com/Tamschi/pinus/issues)
@@ -20,6 +20,13 @@ A prickly BTreeMap.
 - You can insert through shared references and values are pin-projected.
 - You can remove keys and drop entries through exclusive references.
 - You can remove values through exclusive references until the `PineMap` is pinned.
+
+[This][this-is-fine] container API [is fine][this-is-fine] ☕🐕,
+but it's still fully usable without directly referencing that crate.
+
+[this-is-fine]: https://crates.io/crates/this-is-fine
+
+This crate goes together well with [fruit-salad](https://crates.io/crates/fruit-salad) 🥗
 
 <!-- markdownlint-disable heading-increment no-trailing-punctuation -->
 
@@ -49,6 +56,7 @@ cargo add pinus
 ```rust
 use pinus::{prelude::*, sync::PineMap};
 use std::{convert::Infallible, pin::Pin};
+use this_is_fine::prelude::*;
 
 // `PineMap` is interior-mutable, so either is useful:
 let map = PineMap::new();
@@ -133,6 +141,7 @@ use std::{
   convert::Infallible,
   pin::Pin,
 };
+use this_is_fine::prelude::*;
 
 let map = PressedPineMap::<_, dyn Any>::new();
 
@@ -188,6 +197,8 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
+See [CONTRIBUTING](CONTRIBUTING.md) for more information.
+
 ## [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## [Changelog](CHANGELOG.md)
@@ -205,3 +216,6 @@ This includes the Rust version requirement specified above.
 Earlier Rust versions may be compatible, but this can change with minor or patch releases.
 
 Which versions are affected by features and patches can be determined from the respective headings in [CHANGELOG.md](CHANGELOG.md).
+
+Note that dependencies of this crate may have a more lenient MSRV policy!
+Please use `cargo +nightly update -Z minimal-versions` in your automation if you don't generate Cargo.lock manually (or as necessary) and require support for a compiler older than current stable.

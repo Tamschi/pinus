@@ -2,6 +2,19 @@
 
 <!-- markdownlint-disable no-trailing-punctuation -->
 
+## 0.0.4
+
+2021-10-10
+
+- **Breaking changes**:
+  - renamed `.as_unpinned_mut()` to `.as_unpinned_mut_unchecked()`.
+    > This is to make room for the safe `.as_unpinned_mut()` below.
+- Features:
+  - `.as_unpinned_mut()` is now a safe method that requires `V: Unpin`.
+  - added safe `.try_emplace_with_mut_unpinned(…)` and `.emplace_with_mut_unpinned(…)` methods.
+- Revisions:
+  - Documentation improvements.
+
 ## 0.0.3
 
 2021-09-19

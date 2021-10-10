@@ -1,4 +1,5 @@
 //! The shared bulk of the API.
+#![allow(clippy::type_complexity)] // For not-quite fallible methods.
 
 use crate::UnwrapInfallible;
 use std::{
@@ -8,6 +9,7 @@ use std::{
 	pin::Pin,
 };
 use tap::Pipe;
+use this_is_fine::{prelude::*, Fine};
 
 /// The unpinned API.
 pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
@@ -53,7 +55,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&V, (K, F)>, E>
+	) -> Result<Fine<&V, (K, F)>, E>
 	where
 		V: Sized;
 
@@ -62,7 +64,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_with<F: FnOnce(&K) -> V>(&self, key: K, value_factory: F) -> Result<&V, (K, F)>
+	fn insert_with<F: FnOnce(&K) -> V>(&self, key: K, value_factory: F) -> Fine<&V, (K, F)>
 	where
 		V: Sized, // Just for clarity.
 	{
@@ -79,7 +81,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert(&self, key: K, value: V) -> Result<&V, (K, V)>
+	fn insert(&self, key: K, value: V) -> Fine<&V, (K, V)>
 	where
 		V: Sized,
 	{
@@ -115,7 +117,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&mut V, (K, F)>, E>
+	) -> Result<Fine<&mut V, (K, F)>, E>
 	where
 		V: Sized;
 
@@ -128,7 +130,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<&mut V, (K, F)>
+	) -> Fine<&mut V, (K, F)>
 	where
 		V: Sized, // Just for clarity.
 	{
@@ -145,7 +147,7 @@ pub trait UnpinnedPineMap<K: Ord, V: ?Sized> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_mut(&mut self, key: K, value: V) -> Result<&mut V, (K, V)>
+	fn insert_mut(&mut self, key: K, value: V) -> Fine<&mut V, (K, V)>
 	where
 		V: Sized,
 	{
@@ -208,7 +210,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&V, (K, F)>, E>;
+	) -> Result<Fine<&V, (K, F)>, E>;
 
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
 	///
@@ -219,7 +221,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<&V, (K, F)> {
+	) -> Fine<&V, (K, F)> {
 		let value_factory = Cell::new(Some(value_factory));
 		self.try_emplace_with(key, |key, slot| {
 			value_factory.take().expect("unreachable")(key, slot).pipe(Ok)
@@ -233,7 +235,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn emplace(&self, key: K, value: W) -> Result<&V, (K, W)>
+	fn emplace(&self, key: K, value: W) -> Fine<&V, (K, W)>
 	where
 		W: BorrowMut<V>,
 	{
@@ -258,7 +260,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<&mut V, (K, F)>, E>;
+	) -> Result<Fine<&mut V, (K, F)>, E>;
 
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
 	///
@@ -269,7 +271,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<&mut V, (K, F)> {
+	) -> Fine<&mut V, (K, F)> {
 		let value_factory = Cell::new(Some(value_factory));
 		self.try_emplace_with_mut(key, |key, slot| {
 			value_factory.take().expect("unreachable")(key, slot).pipe(Ok)
@@ -283,7 +285,7 @@ pub trait UnpinnedPineMapEmplace<K: Ord, V: ?Sized, W>: UnpinnedPineMap<K, V> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn emplace_mut(&mut self, key: K, value: W) -> Result<&mut V, (K, W)>
+	fn emplace_mut(&mut self, key: K, value: W) -> Fine<&mut V, (K, W)>
 	where
 		W: BorrowMut<V>,
 	{
@@ -347,10 +349,23 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 
 	/// Access the unpinned mutable API.
 	///
+	/// This is safe as `V` is `Unpin`,
+	/// so the values are guaranteed to be movable.
+	fn as_unpinned_mut(&mut self) -> &mut Self::Unpinned
+	where
+		V: Unpin,
+	{
+		unsafe { self.as_unpinned_mut_unchecked() }
+	}
+
+	/// Access the unpinned mutable API without requiring `V: Unpin`.
+	///
+	/// > If `V: Unpin`, use [`.as_unpinned_mut()`](`PinnedPineMap::as_unpinned_mut`) instead!
+	///
 	/// # Safety
 	///
 	/// Pinning invariants for any remaining values `V` must still be upheld.
-	unsafe fn as_unpinned_mut(&mut self) -> &mut Self::Unpinned {
+	unsafe fn as_unpinned_mut_unchecked(&mut self) -> &mut Self::Unpinned {
 		&mut *(self as *mut Self).cast()
 	}
 
@@ -379,7 +394,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<Pin<&V>, (K, F)>, E>
+	) -> Result<Fine<Pin<&V>, (K, F)>, E>
 	where
 		V: Sized,
 	{
@@ -394,7 +409,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_with<F: FnOnce(&K) -> V>(&self, key: K, value_factory: F) -> Result<Pin<&V>, (K, F)>
+	fn insert_with<F: FnOnce(&K) -> V>(&self, key: K, value_factory: F) -> Fine<Pin<&V>, (K, F)>
 	where
 		V: Sized, // Just for clarity.
 	{
@@ -408,7 +423,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert(&self, key: K, value: V) -> Result<Pin<&V>, (K, V)>
+	fn insert(&self, key: K, value: V) -> Fine<Pin<&V>, (K, V)>
 	where
 		V: Sized,
 	{
@@ -423,7 +438,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 	///
 	/// Iff the instance was poisoned.
 	fn clear(&mut self) {
-		unsafe { self.as_unpinned_mut() }.clear()
+		unsafe { self.as_unpinned_mut_unchecked() }.clear()
 	}
 
 	/// Returns a mutable reference to the pinned value corresponding to the key.
@@ -437,7 +452,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		Q: Ord + ?Sized,
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.get_mut(key)
 				.map(|value| Pin::new_unchecked(value))
 		}
@@ -454,12 +469,12 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<Pin<&'a mut V>, (K, F)>, E>
+	) -> Result<Fine<Pin<&'a mut V>, (K, F)>, E>
 	where
 		V: Sized,
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.try_insert_with_mut(key, value_factory)?
 				.map(|value| Pin::new_unchecked(&mut *(value as *mut _)))
 		}
@@ -475,12 +490,12 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		&mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Pin<&'a mut V>, (K, F)>
+	) -> Fine<Pin<&'a mut V>, (K, F)>
 	where
 		V: Sized, // Just for clarity.
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.insert_with_mut(key, value_factory)
 				.map(|value| Pin::new_unchecked(&mut *(value as *mut _)))
 		}
@@ -491,12 +506,12 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn insert_mut<'a>(&mut self, key: K, value: V) -> Result<Pin<&'a mut V>, (K, V)>
+	fn insert_mut<'a>(&mut self, key: K, value: V) -> Fine<Pin<&'a mut V>, (K, V)>
 	where
 		V: Sized,
 	{
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.insert_mut(key, value)
 				.map(|value| Pin::new_unchecked(&mut *(value as *mut _)))
 		}
@@ -510,7 +525,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
 	{
-		unsafe { self.as_unpinned_mut() }.remove_key(key)
+		unsafe { self.as_unpinned_mut_unchecked() }.remove_key(key)
 	}
 
 	/// If a matching key exists, drops the associated key and value. (In unspecified order!)
@@ -527,7 +542,7 @@ pub unsafe trait PinnedPineMap<K: Ord, V: ?Sized> {
 		K: Borrow<Q>,
 		Q: Ord + ?Sized,
 	{
-		unsafe { self.as_unpinned_mut() }.drop_entry(key)
+		unsafe { self.as_unpinned_mut_unchecked() }.drop_entry(key)
 	}
 }
 
@@ -546,6 +561,9 @@ where
 	Self::Unpinned: UnpinnedPineMapEmplace<K, V, W>,
 {
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// > In many cases, you'll want to call `.try_emplace_with_unpinned(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
 	///
@@ -568,7 +586,7 @@ where
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<Pin<&V>, (K, F)>, E> {
+	) -> Result<Fine<Pin<&V>, (K, F)>, E> {
 		let value_factory = Cell::new(Some(value_factory));
 		unsafe {
 			self.as_unpinned()
@@ -582,7 +600,36 @@ where
 		}
 	}
 
+	/// Tries to emplace a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with_unpinned<
+		'a,
+		F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> Result<&'b mut V, E>,
+		E,
+	>(
+		&'a self,
+		key: K,
+		value_factory: F,
+	) -> Result<Fine<Pin<&'a V>, (K, F)>, E>
+	where
+		Self::Unpinned: 'a,
+	{
+		self.as_unpinned()
+			.try_emplace_with(key, value_factory)?
+			.map(|v| unsafe { Pin::new_unchecked(v) })
+			.pipe(Ok)
+	}
+
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// > In many cases, you'll want to call `.emplace_with_unpinned(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
 	///
@@ -600,7 +647,7 @@ where
 		&self,
 		key: K,
 		value_factory: F,
-	) -> Result<Pin<&V>, (K, F)> {
+	) -> Fine<Pin<&V>, (K, F)> {
 		let value_factory = Cell::new(Some(value_factory));
 		unsafe {
 			self.as_unpinned()
@@ -611,6 +658,25 @@ where
 				.map(|value| Pin::new_unchecked(&*(value as *const _)))
 				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 		}
+	}
+
+	/// Emplaces a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with_unpinned<'a, F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> &'b mut V>(
+		&'a self,
+		key: K,
+		value_factory: F,
+	) -> Fine<Pin<&'a V>, (K, F)>
+	where
+		Self::Unpinned: 'a,
+	{
+		self.as_unpinned()
+			.emplace_with(key, value_factory)
+			.map(|v| unsafe { Pin::new_unchecked(v) })
 	}
 
 	/// Emplaces a new value, but only if no such key exists yet.
@@ -626,7 +692,7 @@ where
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn emplace(&self, key: K, value: W) -> Result<Pin<&V>, (K, W)>
+	fn emplace(&self, key: K, value: W) -> Fine<Pin<&V>, (K, W)>
 	where
 		W: BorrowMut<V>,
 	{
@@ -636,7 +702,11 @@ where
 				.map(|value| Pin::new_unchecked(&*(value as *const _)))
 		}
 	}
+
 	/// Tries to emplace a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// > In many cases, you'll want to call `.try_emplace_with_mut_unpinned(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
 	///
@@ -660,13 +730,13 @@ where
 		&'a mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Result<Pin<&'a mut V>, (K, F)>, E>
+	) -> Result<Fine<Pin<&'a mut V>, (K, F)>, E>
 	where
 		Self::Unpinned: 'a,
 	{
 		let value_factory = Cell::new(Some(value_factory));
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.try_emplace_with_mut(key, |key, slot| {
 					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
 						.map(|value| Pin::into_inner_unchecked(value))
@@ -677,7 +747,36 @@ where
 		}
 	}
 
+	/// Tries to emplace a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// # Errors
+	///
+	/// Outer error: Iff `value_factory` fails.
+	///
+	/// Inner error: Iff an entry matching `key` already exists.
+	fn try_emplace_with_mut_unpinned<
+		'a,
+		F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> Result<&'b mut V, E>,
+		E,
+	>(
+		&'a mut self,
+		key: K,
+		value_factory: F,
+	) -> Result<Fine<Pin<&'a mut V>, (K, F)>, E>
+	where
+		Self::Unpinned: 'a,
+	{
+		unsafe { self.as_unpinned_mut_unchecked() }
+			.try_emplace_with_mut(key, value_factory)?
+			.map(|v| unsafe { Pin::new_unchecked(v) })
+			.pipe(Ok)
+	}
+
 	/// Emplaces a new value produced by the given factory, but only if no such key exists yet.
+	///
+	/// > In many cases, you'll want to call `.emplace_with_mut_unpinned(…)` instead,
+	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
 	///
 	/// # Safety
 	///
@@ -695,13 +794,13 @@ where
 		&'a mut self,
 		key: K,
 		value_factory: F,
-	) -> Result<Pin<&'a mut V>, (K, F)>
+	) -> Fine<Pin<&'a mut V>, (K, F)>
 	where
 		Self::Unpinned: 'a,
 	{
 		let value_factory = Cell::new(Some(value_factory));
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.emplace_with_mut(key, |key, slot| {
 					value_factory.take().expect("unreachable")(key, Pin::new_unchecked(slot))
 						.pipe(|value| Pin::into_inner_unchecked(value))
@@ -709,6 +808,25 @@ where
 				.map(|value| Pin::new_unchecked(value))
 				.map_err(|(key, _)| (key, value_factory.take().expect("unreachable")))
 		}
+	}
+
+	/// Emplaces a new unpinned value produced by the given factory, but only if no such key exists yet,
+	/// and then immediately pins it.
+	///
+	/// # Errors
+	///
+	/// Iff an entry matching `key` already exists.
+	fn emplace_with_mut_unpinned<'a, F: for<'b> FnOnce(&K, &'b mut MaybeUninit<W>) -> &'b mut V>(
+		&'a mut self,
+		key: K,
+		value_factory: F,
+	) -> Fine<Pin<&'a mut V>, (K, F)>
+	where
+		Self::Unpinned: 'a,
+	{
+		unsafe { self.as_unpinned_mut_unchecked() }
+			.emplace_with_mut(key, value_factory)
+			.map(|v| unsafe { Pin::new_unchecked(v) })
 	}
 
 	/// Emplaces a new value, but only if no such key exists yet.
@@ -724,14 +842,14 @@ where
 	/// # Errors
 	///
 	/// Iff an entry matching `key` already exists.
-	fn emplace_mut<'a>(&'a mut self, key: K, value: W) -> Result<Pin<&'a mut V>, (K, W)>
+	fn emplace_mut<'a>(&'a mut self, key: K, value: W) -> Fine<Pin<&'a mut V>, (K, W)>
 	where
 		Self::Unpinned: 'a,
 		W: BorrowMut<V>,
 	{
 		let value = Cell::new(Some(value));
 		unsafe {
-			self.as_unpinned_mut()
+			self.as_unpinned_mut_unchecked()
 				.emplace_with_mut(key, |_, slot| {
 					slot.write(value.take().expect("unreachable")).borrow_mut()
 				})

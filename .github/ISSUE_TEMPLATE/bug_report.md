@@ -2,7 +2,7 @@
 name: Bug Report
 about: Create a report to help this project improve
 title: ''
-labels: bug
+labels: 'type: bug'
 assignees: ''
 
 ---
@@ -35,7 +35,7 @@ If applicable, add screenshots to help explain your problem.
 **please complete the following information:**
 
 - `rustc --version`: [e.g. 1.55.0]
-- Crate version (if applicable): [e.g. 0.0.3]
+- Crate version (if applicable): [e.g. 0.0.4]
 
 **Additional context**
 Add any other context about the problem here.
