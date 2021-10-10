@@ -603,9 +603,6 @@ where
 	/// Tries to emplace a new unpinned value produced by the given factory, but only if no such key exists yet,
 	/// and then immediately pins it.
 	///
-	/// > In many cases, you'll want to call `.as_unpinned().try_emplace_with(…)` instead,
-	/// > which can be (more easily) satisfied without using `unsafe` code in the callback.
-	///
 	/// # Errors
 	///
 	/// Outer error: Iff `value_factory` fails.
