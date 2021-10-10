@@ -78,15 +78,15 @@ but I'll otherwise just take care of it.
 
 (Don't undo changes I make to labels without immediate reason.)
 
-See <https://github.com/Tamschi/TODO_CRATE_NAME/issues/labels> for details on individual labels.
+See <https://github.com/Tamschi/pinus/issues/labels> for details on individual labels.
 
 ### Categories
 
 - Assorted
 
-  Labels without prefix like [`breaking`](https://github.com/Tamschi/TODO_CRATE_NAME/labels/breaking),
-  [`good first issue`](https://github.com/Tamschi/TODO_CRATE_NAME/labels/good%20first%20issue) or
-  [`help wanted`](https://github.com/Tamschi/TODO_CRATE_NAME/labels/help%20wanted).
+  Labels without prefix like [`breaking`](https://github.com/Tamschi/pinus/labels/breaking),
+  [`good first issue`](https://github.com/Tamschi/pinus/labels/good%20first%20issue) or
+  [`help wanted`](https://github.com/Tamschi/pinus/labels/help%20wanted).
 
 - `domain:`
 
