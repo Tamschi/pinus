@@ -30,7 +30,7 @@ is-it-maintained-open-issues = { repository = "Tamschi/pinus" }
 maintenance = { status = "experimental" } # This may differ between branches.
 
 [dependencies]
-bumpalo = "3.8.0"
+bumpalo = "3.9.1"
 parking_lot = "0.11.2"
 tap = "1.0.1"
 this-is-fine = "0.0.1"
